@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Price Update — PT Katraco Santika</title>
+<style>
+:root{--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#687386;--line:#e4e9f0;--primary:#0f766e;--primary2:#115e59;--danger:#dc2626;--shadow:0 8px 28px rgba(16,24,40,.07)}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(135deg,#0f766e,#134e4a);color:#fff;padding:26px 30px}
+.wrap{max-width:1450px;margin:auto}.brand{display:flex;justify-content:space-between;align-items:center;gap:20px}.brand h1{margin:0;font-size:25px}.brand p{margin:5px 0 0;color:#d7fffa}
+.actions{display:flex;gap:9px;flex-wrap:wrap}.btn{border:0;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}.btn.primary{background:#fff;color:#0f766e}.btn.green{background:#0f766e;color:#fff}.btn.dark{background:#183b39;color:#fff}.btn.red{background:#fee2e2;color:#991b1b}.btn.gray{background:#eef2f6;color:#334155}
+main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}.stat{background:var(--card);padding:17px 18px;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}.stat .label{color:var(--muted);font-size:13px}.stat .value{font-size:24px;font-weight:800;margin-top:5px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}.toolbar{padding:15px;display:flex;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--line);align-items:center}.search{flex:1;min-width:260px;padding:11px 13px;border:1px solid #d5dce5;border-radius:9px;font-size:14px}.datebox{padding:9px 11px;border:1px solid #d5dce5;border-radius:9px;background:#fff}
+.table-wrap{overflow:auto;max-height:68vh}table{border-collapse:separate;border-spacing:0;width:100%;min-width:1100px}th{position:sticky;top:0;background:#f8fafc;color:#536174;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:12px;border-bottom:1px solid var(--line);z-index:2}td{padding:9px 12px;border-bottom:1px solid #edf1f5;font-size:13px;vertical-align:middle}tr:hover td{background:#fbfffe}td.num,th.num{text-align:right}.price{font-variant-numeric:tabular-nums;white-space:nowrap}.name{font-weight:700}.sub{color:var(--muted);font-size:12px;margin-top:2px}.tag{display:inline-block;background:#edf8f6;color:#0f766e;padding:4px 7px;border-radius:6px;font-size:11px}.row-actions{white-space:nowrap}.icon{border:0;background:#eef2f6;border-radius:7px;padding:7px 9px;cursor:pointer}.icon.del{background:#fee2e2;color:#991b1b}
+.empty{text-align:center;padding:40px;color:var(--muted)}
+.modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.48);align-items:center;justify-content:center;padding:20px;z-index:10}.modal.show{display:flex}.box{background:#fff;border-radius:16px;max-width:720px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.2)}.box h2{margin:0 0 16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field label{display:block;font-size:12px;color:#586579;font-weight:700;margin-bottom:5px}.field input{width:100%;padding:10px;border:1px solid #d5dce5;border-radius:8px}.field.full{grid-column:1/-1}.modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
+.toast{position:fixed;right:20px;bottom:20px;background:#172033;color:#fff;padding:12px 16px;border-radius:9px;display:none;z-index:20}.toast.show{display:block}
+.note{font-size:12px;color:var(--muted);padding:12px 15px;border-top:1px solid var(--line)}
+@media(max-width:800px){.stats{grid-template-columns:1fr 1fr}.brand{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:1fr}.field.full{grid-column:auto}}
+</style>
+</head>
+<body>
+<header>
+<div class="wrap brand">
+  <div><h1>Update Harga Bahan Baku</h1><p>PT Katraco Santika • Daftar harga internal & customer</p></div>
+  <div class="actions">
+    <button class="btn primary" onclick="openAdd()">＋ Tambah Item</button>
+    <button class="btn dark" onclick="exportExcel()">📊 Export Excel</button>
+    <button class="btn dark" onclick="printTable()">🖨️ Print / Cetak</button>
+    <button class="btn dark" onclick="exportJSON()">Backup Data</button>
+    <button class="btn dark" onclick="document.getElementById('importFile').click()">Import Backup</button>
+    <input id="importFile" type="file" accept=".json" hidden onchange="importJSON(event)">
+  </div>
+</div>
+</header>
+
+<main class="wrap">
+<section class="stats">
+  <div class="stat"><div class="label">Jumlah Item</div><div class="value" id="statCount">0</div></div>
+  <div class="stat"><div class="label">Harga Update</div><div class="value" id="statDate">-</div></div>
+  <div class="stat"><div class="label">Item Tampil</div><div class="value" id="statShown">0</div></div>
+</section>
+
+<section class="panel">
+<div class="toolbar">
+  <input id="search" class="search" placeholder="Cari nama, spesifikasi, atau kemasan..." oninput="render()">
+  <input id="date" class="datebox" type="date" title="Tanggal harga otomatis saat terakhir disimpan" readonly>
+  <button class="btn green" onclick="openAdd()">＋ Item Baru</button>
+  <button class="btn dark" onclick="saveNow()">💾 Simpan Perubahan</button>
+  <button class="btn gray" onclick="resetData()">Reset ke Data Excel</button>
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr>
+<th style="width:50px">No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th>
+<th class="num">Harga 1</th><th class="num">Harga 2</th><th class="num">Harga 3</th><th style="width:100px">Aksi</th>
+</tr></thead>
+<tbody id="tbody"></tbody>
+</table>
+</div>
+<div class="note">Perubahan tersimpan otomatis di browser ini. Gunakan <b>Backup Data</b> secara berkala jika website dipakai di komputer berbeda.</div>
+</section>
+</main>
+
+<div class="modal" id="modal">
+<div class="box">
+<h2 id="modalTitle">Tambah Item</h2>
+<div class="grid">
+<div class="field"><label>Nama Bahan</label><input id="fNama"></div>
+<div class="field"><label>Spesifikasi</label><input id="fSpec"></div>
+<div class="field"><label>Kemasan</label><input id="fKemasan"></div>
+<div class="field"><label>Harga 1</label><input id="fH1" type="number" step="0.01"></div>
+<div class="field"><label>Harga 2 <span style="font-weight:400;color:#0f766e">(Harga 1 + 14%)</span></label><input id="fH2" type="number" step="0.01" readonly></div>
+<div class="field"><label>Harga 3 <span style="font-weight:400;color:#0f766e">(Harga 1 + 23%)</span></label><input id="fCust" type="number" step="0.01" readonly></div>
+</div>
+<div class="modal-actions">
+<button class="btn gray" onclick="closeModal()">Batal</button>
+<button class="btn green" onclick="saveItem()">💾 Simpan Perubahan</button>
+</div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const INITIAL = [{"no": 1, "nama": "Allzyme", "spesifikasi": "Allzyme SSF-E", "kemasan": "", "harga1": 172050.0, "harga2": 196137.0, "customer": 211621.5}, {"no": 2, "nama": "Amoxycillin", "spesifikasi": "Amoxycillin Pure - DNA", "kemasan": "25Kg/Zak", "harga1": 800000.0, "harga2": 912000.0, "customer": 984000.0}, {"no": 3, "nama": "Ampicillin", "spesifikasi": "Ampicillin Pure - DNA", "kemasan": "25Kg/Drum", "harga1": 650000.0, "harga2": 741000.0, "customer": 799500.0}, {"no": 4, "nama": "Ampok", "spesifikasi": "Ampok", "kemasan": "", "harga1": 6250.0, "harga2": 7125.0, "customer": 7687.5}, {"no": 5, "nama": "Amprolium Pure", "spesifikasi": "Amprolium Pure - DNA", "kemasan": "", "harga1": 721500.0, "harga2": 822510.0, "customer": 887445.0}, {"no": 6, "nama": "ASAM BUTIRAT (CITA C4)", "spesifikasi": "ASAM BUTIRAN (CITA C4)", "kemasan": "", "harga1": 81030.0, "harga2": 92374.2, "customer": 99666.9}, {"no": 7, "nama": "AXTRA XAP 101", "spesifikasi": "AXTRA XAP 101", "kemasan": "", "harga1": 333000.0, "harga2": 379620.0, "customer": 409590.0}, {"no": 8, "nama": "Azamethipos", "spesifikasi": "Azamethipos", "kemasan": "", "harga1": 5439800.0, "harga2": 6201372.0, "customer": 6690954.0}, {"no": 9, "nama": "Azorubin", "spesifikasi": "Azorubin Red", "kemasan": "", "harga1": 888500.0, "harga2": 1012890.0, "customer": 1092855.0}, {"no": 10, "nama": "Bedgen", "spesifikasi": "Bedgen Premix", "kemasan": "", "harga1": 310800.0, "harga2": 354312.0, "customer": 382284.0}, {"no": 11, "nama": "Benzalkonium", "spesifikasi": "Benzalkonium Chloride 50", "kemasan": "20Kg/Jerigen", "harga1": 54120.0, "harga2": 61696.8, "customer": 66567.6}, {"no": 12, "nama": "BENZYL ALKOHOL", "spesifikasi": "BENZIL ALKOHOL", "kemasan": "25KG/CAN", "harga1": 85000.0, "harga2": 96900.0, "customer": 104550.0}, {"no": 13, "nama": "Alkohol", "spesifikasi": "Benzyl Alkohol", "kemasan": "", "harga1": 85000.0, "harga2": 96900.0, "customer": 104550.0}, {"no": 14, "nama": "Calcium Carbonat", "spesifikasi": "Calcium Carbonat", "kemasan": "", "harga1": 650.0, "harga2": 741.0, "customer": 799.5}, {"no": 15, "nama": "Calcium Iodine", "spesifikasi": "Calcium Iodine", "kemasan": "", "harga1": 1248750.0, "harga2": 1423575.0, "customer": 1535962.5}, {"no": 16, "nama": "Calcium Panthothenate", "spesifikasi": "Calcium Panthothenate", "kemasan": "", "harga1": 173160.0, "harga2": 197402.4, "customer": 212986.8}, {"no": 17, "nama": "Calprona", "spesifikasi": "Calprona", "kemasan": "", "harga1": 15200.0, "harga2": 17328.0, "customer": 18696.0}, {"no": 18, "nama": "Canthaxantin Poedwe", "spesifikasi": "Canthaxantin Powder", "kemasan": "5 kg/Bag", "harga1": 543900.0, "harga2": 620046.0, "customer": 668997.0}, {"no": 19, "nama": "Challenge Probiotik", "spesifikasi": "Challenge Probiotik", "kemasan": "25kg/Zak", "harga1": 65000.0, "harga2": 74100.0, "customer": 79950.0}, {"no": 20, "nama": "Chelatric Layer", "spesifikasi": "Chelatric Layer", "kemasan": "", "harga1": 60000.0, "harga2": 68400.0, "customer": 73800.0}, {"no": 21, "nama": "CTC-Dna", "spesifikasi": "Chlortetracycline HCL -DNA", "kemasan": "", "harga1": 540000.0, "harga2": 615600.0, "customer": 664200.0}, {"no": 22, "nama": "Choline Chloride", "spesifikasi": "Choline Chloride 60%", "kemasan": "25Kg/Zak", "harga1": 19758.0, "harga2": 22524.12, "customer": 24302.34}, {"no": 23, "nama": "Ciprofloxacin", "spesifikasi": "Ciprofloxacin", "kemasan": "25Kg/Drum", "harga1": 569100.0, "harga2": 648774.0, "customer": 699993.0}, {"no": 24, "nama": "Cobalt Sulphate", "spesifikasi": "Cobalt Sulphate", "kemasan": "", "harga1": 399600.0, "harga2": 455544.0, "customer": 491508.0}, {"no": 25, "nama": "Complex Enzyme For Layer", "spesifikasi": "Complex Enzyme For Layer", "kemasan": "25Kg/Zak", "harga1": 90000.0, "harga2": 102600.0, "customer": 110700.0}, {"no": 26, "nama": "Copper Oxide", "spesifikasi": "Copper Oxide 77%", "kemasan": "", "harga1": 207050.0, "harga2": 236037.0, "customer": 254671.5}, {"no": 27, "nama": "Copper Sulphate", "spesifikasi": "Copper Sulphate 25%", "kemasan": "", "harga1": 84360.0, "harga2": 96170.4, "customer": 103762.8}, {"no": 28, "nama": "Cyprofloxacine Pure", "spesifikasi": "Cyprofloxacine Pure", "kemasan": "", "harga1": 603500.0, "harga2": 687990.0, "customer": 742305.0}, {"no": 29, "nama": "Cyromazine 10%", "spesifikasi": "Cyromazine", "kemasan": "20 kg/bag", "harga1": 58558.0, "harga2": 66756.12, "customer": 72026.34}, {"no": 30, "nama": "DL Methionine", "spesifikasi": "DL Methionine 99%", "kemasan": "25Kg/Zak", "harga1": 101000.0, "harga2": 115140.0, "customer": 124230.0}, {"no": 31, "nama": "Doxycycline Pure", "spesifikasi": "Doxycycline Pure - DNA", "kemasan": "25Kg/Drum", "harga1": 820000.0, "harga2": 934800.0, "customer": 1008600.0}, {"no": 32, "nama": "ELIFE PX100 (Anti Oxidan)", "spesifikasi": "ELIFE PX100 (Anti Oxidan)", "kemasan": "", "harga1": 121777.0, "harga2": 138825.78, "customer": 149785.71}, {"no": 33, "nama": "Enradin/Enramycin", "spesifikasi": "Enradin F-80", "kemasan": "", "harga1": 146000.0, "harga2": 166440.0, "customer": 179580.0}, {"no": 34, "nama": "Enrofloxacin Base", "spesifikasi": "Enrofloxacin Base", "kemasan": "", "harga1": 410700.0, "harga2": 468198.0, "customer": 505161.0}, {"no": 35, "nama": "Erythromycine Pure", "spesifikasi": "Erythromycine Pure - DNA", "kemasan": "25Kg/Drum", "harga1": 880000.0, "harga2": 1003200.0, "customer": 1082400.0}, {"no": 36, "nama": "Ferro Carbonat", "spesifikasi": "Ferro Carbonat 38%", "kemasan": "", "harga1": 6294.0, "harga2": 7175.16, "customer": 7741.62}, {"no": 37, "nama": "Ferro Sulphate", "spesifikasi": "Ferro Sulphate 30%", "kemasan": "", "harga1": 10767.0, "harga2": 12274.380000000001, "customer": 13243.41}, {"no": 38, "nama": "Folic Acid", "spesifikasi": "Folic Acid", "kemasan": "", "harga1": 888000.0, "harga2": 1012320.0, "customer": 1092240.0}, {"no": 39, "nama": "GALLIPORO TECT", "spesifikasi": "GALLIPORO TECT", "kemasan": "", "harga1": 110000.0, "harga2": 125400.0, "customer": 135300.0}, {"no": 40, "nama": "Garam", "spesifikasi": "Garam Halus", "kemasan": "", "harga1": 3700.0, "harga2": 4218.0, "customer": 4551.0}, {"no": 41, "nama": "Glutaraldehyde", "spesifikasi": "Glutaraldehyde", "kemasan": "25 Kg/Drum", "harga1": 90200.0, "harga2": 102828.0, "customer": 110946.0}, {"no": 42, "nama": "Guanidinoacetic Acid", "spesifikasi": "Guanidinoacetic Acid", "kemasan": "", "harga1": 83000.0, "harga2": 94620.0, "customer": 102090.0}, {"no": 43, "nama": "Halquinol 60%", "spesifikasi": "Halquionol 60%", "kemasan": "20Kg/Zak", "harga1": 288600.0, "harga2": 329004.0, "customer": 354978.0}, {"no": 44, "nama": "Kalium Chloride", "spesifikasi": "Kalium Chloride", "kemasan": "", "harga1": 30000.0, "harga2": 34200.0, "customer": 36900.0}, {"no": 45, "nama": "KEMZYME", "spesifikasi": "KEMZYME", "kemasan": "", "harga1": 48300.0, "harga2": 55062.0, "customer": 59409.0}, {"no": 46, "nama": "Lactose", "spesifikasi": "Lactose Mesh 200", "kemasan": "", "harga1": 37540.0, "harga2": 42795.6, "customer": 46174.2}, {"no": 47, "nama": "Levamisol-DNA", "spesifikasi": "Levamisol-DNA", "kemasan": "", "harga1": 1221000.0, "harga2": 1391940.0, "customer": 1501830.0}, {"no": 48, "nama": "L-Isoleucine", "spesifikasi": "L-Isoleucine", "kemasan": "20Kg/Bag", "harga1": 94683.0, "harga2": 107938.62, "customer": 116460.09}, {"no": 49, "nama": "L-Methionine", "spesifikasi": "L-Methionine", "kemasan": "25kg/zak", "harga1": 62500.0, "harga2": 71250.0, "customer": 76875.0}, {"no": 50, "nama": "L-Valine", "spesifikasi": "l-Valine", "kemasan": "25Kg/Bag", "harga1": 33855.0, "harga2": 38594.7, "customer": 41641.65}, {"no": 51, "nama": "Lysine", "spesifikasi": "Lysine HCL", "kemasan": "25Kg/Zak", "harga1": 23310.0, "harga2": 26573.4, "customer": 28671.3}, {"no": 52, "nama": "Magnesium Sulphate", "spesifikasi": "Magnesium Sulphate", "kemasan": "", "harga1": 10101.0, "harga2": 11515.14, "customer": 12424.23}, {"no": 53, "nama": "Maltodextrin", "spesifikasi": "Maltodextrin", "kemasan": "", "harga1": 13875.0, "harga2": 15817.5, "customer": 17066.25}, {"no": 54, "nama": "Manganese Oxide", "spesifikasi": "Manganese Oxide", "kemasan": "", "harga1": 15873.0, "harga2": 18095.22, "customer": 19523.79}, {"no": 55, "nama": "Manganese Sulphate", "spesifikasi": "Manganese Sulphate", "kemasan": "", "harga1": 14763.0, "harga2": 16829.82, "customer": 18158.49}, {"no": 56, "nama": "METIPEARL", "spesifikasi": "METIPEARL", "kemasan": "", "harga1": 146000.0, "harga2": 166440.0, "customer": 179580.0}, {"no": 57, "nama": "Monensin", "spesifikasi": "Monensin", "kemasan": "", "harga1": 108000.0, "harga2": 123120.0, "customer": 132840.0}, {"no": 58, "nama": "Natrium Chloride", "spesifikasi": "Natrium Chloride", "kemasan": "", "harga1": 18600.0, "harga2": 21204.0, "customer": 22878.0}, {"no": 59, "nama": "Natrium Selenit 45%", "spesifikasi": "Natrium Selenit 45%", "kemasan": "25 kg/Zak", "harga1": 360750.0, "harga2": 411255.0, "customer": 443722.5}, {"no": 60, "nama": "Neomycin Sulphate", "spesifikasi": "Neomycin Sulphate - DNA", "kemasan": "25Kg/Drum", "harga1": 338500.0, "harga2": 385890.0, "customer": 416355.0}, {"no": 61, "nama": "Niclosamide", "spesifikasi": "Niclosamide - DNA", "kemasan": "25 Kg/Zak", "harga1": 283050.0, "harga2": 322677.0, "customer": 348151.5}, {"no": 62, "nama": "Nicotinamide", "spesifikasi": "Nicotinamid Grade", "kemasan": "", "harga1": 119880.0, "harga2": 136663.2, "customer": 147452.4}, {"no": 63, "nama": "Nicotinic Acid (Niacin)", "spesifikasi": "Nicotinic Acid (Niacin)", "kemasan": "", "harga1": 113220.0, "harga2": 129070.8, "customer": 139260.6}, {"no": 64, "nama": "NOR GRAPE PX100 (Anti oxidan)", "spesifikasi": "Nor Grape PX100 (Anti Oxidan)", "kemasan": "", "harga1": 244200.0, "harga2": 278388.0, "customer": 300366.0}, {"no": 65, "nama": "OTC", "spesifikasi": "Oxytetracycline Pure - DNA", "kemasan": "25 Kg/Drum", "harga1": 239760.0, "harga2": 273326.4, "customer": 294904.8}, {"no": 66, "nama": "Paracetamol", "spesifikasi": "Paracetamol Pure - DNA", "kemasan": "25Kg/Drum", "harga1": 128760.0, "harga2": 146786.4, "customer": 158374.8}, {"no": 67, "nama": "phytase 10.000", "spesifikasi": "phytase 10.000", "kemasan": "", "harga1": 35750.0, "harga2": 40755.0, "customer": 43972.5}, {"no": 68, "nama": "Piperazine Citrate", "spesifikasi": "Piperazine Citrate", "kemasan": "", "harga1": 128100.0, "harga2": 146034.0, "customer": 157563.0}, {"no": 69, "nama": "Potasium Hydroxide", "spesifikasi": "Potasium Hydroxide", "kemasan": "", "harga1": 27500.0, "harga2": 31350.0, "customer": 33825.0}, {"no": 70, "nama": "Potassium Chloride", "spesifikasi": "Potassium Chloride", "kemasan": "", "harga1": 18650.0, "harga2": 21261.0, "customer": 22939.5}, {"no": 71, "nama": "POTASSIUM IODIDE", "spesifikasi": "Potassium Iodide", "kemasan": "25 Kg/Zak", "harga1": 1276500.0, "harga2": 1455210.0, "customer": 1570095.0}, {"no": 72, "nama": "Propilene Glycol", "spesifikasi": "Propilene Glycol", "kemasan": "", "harga1": 47300.0, "harga2": 53922.0, "customer": 58179.0}, {"no": 73, "nama": "Quixalud", "spesifikasi": "Quixalud", "kemasan": "20Kg/Drum", "harga1": 658050.0, "harga2": 750177.0, "customer": 809401.5}, {"no": 74, "nama": "Sipernat", "spesifikasi": "Sipernat", "kemasan": "", "harga1": 43500.0, "harga2": 49590.0, "customer": 53505.0}, {"no": 75, "nama": "Sodium Bicarbonat", "spesifikasi": "Sodium Bicarbonat", "kemasan": "", "harga1": 4496.0, "harga2": 5125.4400000000005, "customer": 5530.08}, {"no": 76, "nama": "Sodium Butirat Coated", "spesifikasi": "Sodium Butirat Coated", "kemasan": "20Kg/Zak", "harga1": 77700.0, "harga2": 88578.0, "customer": 95571.0}, {"no": 77, "nama": "Sodium Metabisulfit", "spesifikasi": "Sodium Metabisulfit", "kemasan": "", "harga1": 10050.0, "harga2": 11457.0, "customer": 12361.5}, {"no": 78, "nama": "Streptomycin Sulphate-DNA", "spesifikasi": "Streptomycin Sulphate-DNA", "kemasan": "1Kg/Doos (10x 100gr Botol)", "harga1": 4850000.0, "harga2": 5529000.0, "customer": 5965500.0}, {"no": 79, "nama": "Sulfadiazine Base", "spesifikasi": "Sulfadiazine Base", "kemasan": "", "harga1": 590000.0, "harga2": 672600.0, "customer": 725700.0}, {"no": 80, "nama": "Sulfadiazine Sodium", "spesifikasi": "Sulfadiazine Sodium - DNA", "kemasan": "", "harga1": 490000.0, "harga2": 558600.0, "customer": 602700.0}, {"no": 81, "nama": "Sulfamonomethoxine Sodium", "spesifikasi": "Sulfamonomethoxine Sodium - DNA", "kemasan": "25Kg/Drum", "harga1": 860000.0, "harga2": 980400.0, "customer": 1057800.0}, {"no": 82, "nama": "Threonine", "spesifikasi": "Threonine", "kemasan": "", "harga1": 22977.0, "harga2": 26193.78, "customer": 28261.71}, {"no": 83, "nama": "Toxin Binder HS 100", "spesifikasi": "Tocin Binder HS 100", "kemasan": "", "harga1": 7700.0, "harga2": 8778.0, "customer": 9471.0}, {"no": 84, "nama": "Toxin Binder Klinofeed", "spesifikasi": "Toxin Binder Klinofeed", "kemasan": "", "harga1": 16872.0, "harga2": 19234.08, "customer": 20752.56}, {"no": 85, "nama": "Trimethoprim", "spesifikasi": "Trimethoprim - DNA", "kemasan": "", "harga1": 600000.0, "harga2": 684000.0, "customer": 738000.0}, {"no": 86, "nama": "Tritophan", "spesifikasi": "Tritophan", "kemasan": "25KG/ZAK", "harga1": 101010.0, "harga2": 115151.4, "customer": 124242.3}, {"no": 87, "nama": "Tylosine Tartrate", "spesifikasi": "Tylosine Tartrate", "kemasan": "15Kg/Doos", "harga1": 709290.0, "harga2": 808590.6, "customer": 872426.7}, {"no": 88, "nama": "Vetribac", "spesifikasi": "Vetribac", "kemasan": "", "harga1": 98900.0, "harga2": 112746.0, "customer": 121647.0}, {"no": 89, "nama": "Vit C Uncoated", "spesifikasi": "Vit C Uncoated", "kemasan": "", "harga1": 55500.0, "harga2": 63270.0, "customer": 68265.0}, {"no": 90, "nama": "Vitamin A", "spesifikasi": "Vitamin A 500 WS", "kemasan": "20Kg/Drum", "harga1": 599400.0, "harga2": 683316.0, "customer": 737262.0}, {"no": 91, "nama": "Vitamin AD3", "spesifikasi": "Vitamin AD3 1000/200", "kemasan": "25 Kg/Zak", "harga1": 593850.0, "harga2": 676989.0, "customer": 730435.5}, {"no": 92, "nama": "Vitamin B1", "spesifikasi": "Vitamin B1 Mononitrate", "kemasan": "25 Kg/Doos", "harga1": 616050.0, "harga2": 702297.0, "customer": 757741.5}, {"no": 93, "nama": "Vitamin B12", "spesifikasi": "Vitamin B12 1% Feed Grade", "kemasan": "25Kg/Doos", "harga1": 199800.0, "harga2": 227772.0, "customer": 245754.0}, {"no": 94, "nama": "Vitamin B2", "spesifikasi": "Vitamin B2 80%", "kemasan": "25Kg/Drum", "harga1": 218670.0, "harga2": 249283.8, "customer": 268964.1}, {"no": 95, "nama": "Vitamin B2", "spesifikasi": "Vitamin B2 Pharma Grade", "kemasan": "", "harga1": 710400.0, "harga2": 809856.0, "customer": 873792.0}, {"no": 96, "nama": "Vitamin B6", "spesifikasi": "Vitamin B6", "kemasan": "25Kg/Drum", "harga1": 299700.0, "harga2": 341658.0, "customer": 368631.0}, {"no": 97, "nama": "Vitamin C Coated", "spesifikasi": "Vitamin C Coated", "kemasan": "25kg", "harga1": 63270.0, "harga2": 72127.8, "customer": 77822.1}, {"no": 98, "nama": "Vitamin D3", "spesifikasi": "Vitamin D3 500 WS", "kemasan": "25Kg/Doos", "harga1": 377400.0, "harga2": 430236.0, "customer": 464202.0}, {"no": 99, "nama": "Vitamin E", "spesifikasi": "Vitamin E 50 WS", "kemasan": "", "harga1": 355200.0, "harga2": 404928.0, "customer": 436896.0}, {"no": 100, "nama": "Vitamin E", "spesifikasi": "Vitamin E 50Ads Feed Grade", "kemasan": "25Kg/Zak", "harga1": 194250.0, "harga2": 221445.0, "customer": 238927.5}, {"no": 101, "nama": "Vitamin H", "spesifikasi": "Vitamin H 2% Biotin", "kemasan": "20Kg/Doos", "harga1": 82140.0, "harga2": 93639.6, "customer": 101032.2}, {"no": 102, "nama": "Vitamin K3", "spesifikasi": "Vitamin K3 50%", "kemasan": "25Kg/Doos", "harga1": 266400.0, "harga2": 303696.0, "customer": 327672.0}, {"no": 103, "nama": "Water", "spesifikasi": "Water", "kemasan": "", "harga1": 3500.0, "harga2": 3990.0, "customer": 4305.0}, {"no": 104, "nama": "Xyalanase", "spesifikasi": "Xyalanase", "kemasan": "25Kg/Zak", "harga1": 94500.0, "harga2": 107730.0, "customer": 116235.0}, {"no": 105, "nama": "Zinc Bacitracin", "spesifikasi": "Zinc Bacitracin", "kemasan": "", "harga1": 47730.0, "harga2": 54412.2, "customer": 58707.9}, {"no": 106, "nama": "Zinc Oxide", "spesifikasi": "Zinc Oxide 99.5%", "kemasan": "", "harga1": 72150.0, "harga2": 82251.0, "customer": 88744.5}, {"no": 107, "nama": "Zinc Sulphate", "spesifikasi": "Zinc Sulphate", "kemasan": "", "harga1": 22129.0, "harga2": 25227.06, "customer": 27218.67}, {"no": 108, "nama": "Dicalcium Phosphate", "spesifikasi": "Dicalcium Phosphate", "kemasan": "", "harga1": 14708.0, "harga2": 16767.12, "customer": 18090.84}, {"no": 109, "nama": "Hepatron 85%", "spesifikasi": "Hepatron 85%", "kemasan": "", "harga1": 97000.0, "harga2": 110580.0, "customer": 119310.0}, {"no": 110, "nama": "Feedox Dry", "spesifikasi": "Feedox Dry", "kemasan": "", "harga1": 43712.0, "harga2": 49831.68, "customer": 53765.76}];
+const INITIAL_DATE = "2026-09-21";
+let savedData=null;
+try{savedData=JSON.parse(localStorage.getItem("katraco_prices") || "null")}catch(e){}
+let data = Array.isArray(savedData) && savedData.length ? savedData : JSON.parse(JSON.stringify(INITIAL));
+let priceDate = localStorage.getItem("katraco_price_date") || INITIAL_DATE;
+let editIndex = null;
+
+function money(v){return new Intl.NumberFormat("id-ID",{maximumFractionDigits:2}).format(Number(v)||0)}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function todayISO(){
+ const d=new Date();
+ const y=d.getFullYear();
+ const m=String(d.getMonth()+1).padStart(2,"0");
+ const day=String(d.getDate()).padStart(2,"0");
+ return `${y}-${m}-${day}`;
+}
+function save(updateDate=true){
+ if(updateDate) priceDate=todayISO();
+ localStorage.setItem("katraco_prices",JSON.stringify(data));
+ localStorage.setItem("katraco_price_date",priceDate);
+}
+function saveDate(){document.getElementById("date").value=priceDate;updateStats()}
+function toast(t){let x=document.getElementById("toast");x.textContent=t;x.classList.add("show");setTimeout(()=>x.classList.remove("show"),2200)}
+function render(){
+ const q=document.getElementById("search").value.toLowerCase().trim();
+ const filtered=data.filter(x=>[x.nama,x.spesifikasi,x.kemasan].join(" ").toLowerCase().includes(q));
+ document.getElementById("tbody").innerHTML=filtered.length?filtered.map(x=>{
+   const i=data.indexOf(x);
+   return `<tr><td>${x.no}</td>
+   <td><div class="name">${esc(x.nama)}</div></td>
+   <td>${esc(x.spesifikasi)}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:"-"}</td>
+   <td class="num price">Rp ${money(x.harga1)}</td><td class="num price">Rp ${money(x.harga2)}</td><td class="num price"><b>Rp ${money(x.customer)}</b></td>
+   <td class="row-actions"><button class="icon" onclick="openEdit(${i})">Edit</button> <button class="icon del" onclick="delItem(${i})">Hapus</button></td></tr>`
+ }).join(""):`<tr><td colspan="8" class="empty">Data tidak ditemukan.</td></tr>`;
+ document.getElementById("statShown").textContent=filtered.length;
+ updateStats();
+}
+function updateStats(){
+ document.getElementById("statCount").textContent=data.length;
+ document.getElementById("statDate").textContent=priceDate?new Date(priceDate+"T00:00:00").toLocaleDateString("id-ID",{day:"2-digit",month:"short",year:"numeric"}):"-";
+ document.getElementById("date").value=priceDate;
+}
+function openAdd(){
+ editIndex=null; document.getElementById("modalTitle").textContent="Tambah Item";
+ ["fNama","fSpec","fKemasan","fH1","fH2","fCust"].forEach(id=>document.getElementById(id).value="");
+ calculateDerivedPrices();
+ document.getElementById("modal").classList.add("show");
+}
+function openEdit(i){
+ editIndex=i; const x=data[i]; document.getElementById("modalTitle").textContent="Edit Item";
+ document.getElementById("fNama").value=x.nama||"";document.getElementById("fSpec").value=x.spesifikasi||"";
+ document.getElementById("fKemasan").value=x.kemasan||"";document.getElementById("fH1").value=x.harga1||0;
+ calculateDerivedPrices();
+ document.getElementById("modal").classList.add("show");
+}
+function closeModal(){document.getElementById("modal").classList.remove("show")}
+function calculateDerivedPrices(){
+ const h1=Number(document.getElementById("fH1").value)||0;
+ document.getElementById("fH2").value=Math.round(h1*1.14);
+ document.getElementById("fCust").value=Math.round(h1*1.23);
+}
+document.getElementById("fH1").addEventListener("input", calculateDerivedPrices);
+
+function saveItem(){
+ const item={nama:document.getElementById("fNama").value.trim(),spesifikasi:document.getElementById("fSpec").value.trim(),kemasan:document.getElementById("fKemasan").value.trim(),
+ harga1:Number(document.getElementById("fH1").value)||0,harga2:Math.round((Number(document.getElementById("fH1").value)||0)*1.14),customer:Math.round((Number(document.getElementById("fH1").value)||0)*1.23)};
+ if(!item.nama){alert("Nama bahan wajib diisi.");return}
+ if(editIndex===null){item.no=data.length?Math.max(...data.map(x=>Number(x.no)||0))+1:1;data.push(item);toast("Item berhasil ditambahkan")}
+ else {item.no=data[editIndex].no;data[editIndex]=item;toast("Item berhasil diperbarui")}
+ save(true);closeModal();render();toast("✓ Perubahan berhasil disimpan");
+}
+function delItem(i){if(confirm("Hapus item "+data[i].nama+"?")){data.splice(i,1);data.forEach((x,j)=>x.no=j+1);save();render();toast("Item dihapus")}}
+function resetData(){if(confirm("Kembalikan semua data ke data Excel awal? Perubahan lokal akan hilang.")){data=JSON.parse(JSON.stringify(INITIAL));priceDate=INITIAL_DATE;save(false);render();toast("Data dikembalikan")}}
+function saveNow(){
+ save(true);
+ render();
+ toast("✓ Data berhasil disimpan • " + new Date().toLocaleDateString("id-ID",{day:"2-digit",month:"long",year:"numeric"}));
+}
+function exportExcel(){
+ const rows=data.map((x,i)=>({
+   no:i+1,
+   nama:x.nama||"",
+   spesifikasi:x.spesifikasi||"",
+   kemasan:x.kemasan||"",
+   harga1:Math.round(Number(x.harga1)||0),
+   harga2:Math.round((Number(x.harga1)||0)*1.14),
+   harga3:Math.round((Number(x.harga1)||0)*1.23)
+ }));
+
+ // Create an Excel-compatible .xls file directly in the browser.
+ // This avoids external libraries and works without internet.
+ const escX=v=>String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")
+   .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+ const excelNum=v=>String(Math.round(Number(v)||0));
+
+ const body=rows.map(x=>`<tr>
+   <td>${x.no}</td>
+   <td>${escX(x.nama)}</td>
+   <td>${escX(x.spesifikasi)}</td>
+   <td>${escX(x.kemasan)}</td>
+   <td class="num" style="mso-number-format:'#,##0';">${excelNum(x.harga1)}</td>
+   <td class="num" style="mso-number-format:'#,##0';">${excelNum(x.harga2)}</td>
+   <td class="num" style="mso-number-format:'#,##0';">${excelNum(x.harga3)}</td>
+ </tr>`).join("");
+
+ const updateText=new Date(priceDate+"T00:00:00").toLocaleDateString("id-ID",{
+   day:"2-digit",month:"long",year:"numeric"
+ });
+
+ const xls=`<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="UTF-8">
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>
+<x:ExcelWorksheet><x:Name>Daftar Harga</x:Name><x:WorksheetOptions>
+<x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+<style>
+body{font-family:Arial}
+.title{font-size:16pt;font-weight:bold}
+.info{font-size:10pt}
+table{border-collapse:collapse}
+th{background:#d9e2f3;font-weight:bold;border:1px solid #888;padding:6px}
+td{border:1px solid #aaa;padding:5px}
+.num{text-align:right}
+</style>
+</head>
+<body>
+<table>
+<tr><td colspan="7" class="title">DAFTAR HARGA BAHAN BAKU - PT KATRACO SANTIKA</td></tr>
+<tr><td colspan="7" class="info">Harga Update: ${escX(updateText)}</td></tr>
+<tr><td colspan="7"></td></tr>
+<tr>
+<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th>
+<th>Harga 1</th><th>Harga 2</th><th>Harga 3</th>
+</tr>
+${body}
+</table>
+</body></html>`;
+
+ const blob=new Blob(["\ufeff",xls],{type:"application/vnd.ms-excel"});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+ a.href=url;
+ a.download="Daftar_Harga_Katraco_"+priceDate+".xls";
+ document.body.appendChild(a);
+ a.click();
+ a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+ toast("✓ Excel berhasil dibuat");
+}
+function printTable(){
+ const q=document.getElementById("search").value.toLowerCase().trim();
+ const filtered=data.filter(x=>[x.nama,x.spesifikasi,x.kemasan].join(" ").toLowerCase().includes(q));
+ const rows=filtered.map((x,i)=>`
+   <tr>
+    <td>${i+1}</td>
+    <td><b>${esc(x.nama)}</b></td>
+    <td>${esc(x.spesifikasi)}</td>
+    <td>${esc(x.kemasan)}</td>
+    <td class="num">Rp ${money(Math.round(Number(x.harga1)||0))}</td>
+    <td class="num">Rp ${money(Math.round((Number(x.harga1)||0)*1.14))}</td>
+    <td class="num">Rp ${money(Math.round((Number(x.harga1)||0)*1.23))}</td>
+   </tr>`).join("");
+ const w=window.open("","_blank","width=1200,height=800");
+ if(!w){alert("Pop-up diblokir browser. Izinkan pop-up untuk mencetak.");return;}
+ w.document.write(`<!DOCTYPE html><html><head><title>Daftar Harga PT Katraco Santika</title>
+ <style>
+ body{font-family:Arial,sans-serif;margin:25px;color:#111}
+ h1{font-size:20px;margin:0 0 5px;text-align:center}
+ .sub{text-align:center;font-size:12px;margin-bottom:18px}
+ table{width:100%;border-collapse:collapse;font-size:10px}
+ th{background:#eee;font-weight:bold}
+ th,td{border:1px solid #999;padding:6px 7px}
+ .num{text-align:right;white-space:nowrap}
+ @media print{body{margin:10mm}button{display:none}}
+ </style></head><body>
+ <h1>DAFTAR HARGA BAHAN BAKU</h1>
+ <div class="sub">PT KATRACO SANTIKA &nbsp;•&nbsp; Harga Update: ${new Date(priceDate+"T00:00:00").toLocaleDateString("id-ID",{day:"2-digit",month:"long",year:"numeric"})}</div>
+ <table><thead><tr>
+ <th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th>
+ <th>Harga 1</th><th>Harga 2</th><th>Harga 3</th>
+ </tr></thead><tbody>${rows||'<tr><td colspan="7">Data tidak ditemukan.</td></tr>'}</tbody></table>
+ </body></html>`);
+ w.document.close();
+ setTimeout(()=>w.print(),300);
+}
+
+function exportJSON(){
+ const blob=new Blob([JSON.stringify({priceDate,data},null,2)],{type:"application/json"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="backup-harga-katraco.json";a.click();URL.revokeObjectURL(a.href);toast("Backup berhasil dibuat");
+}
+function importJSON(e){
+ const f=e.target.files[0];if(!f)return;const r=new FileReader();
+ r.onload=()=>{try{const o=JSON.parse(r.result);if(!Array.isArray(o.data))throw 0;data=o.data;priceDate=o.priceDate||priceDate;save(false);render();toast("Backup berhasil diimport")}catch{alert("File backup tidak valid.")}};
+ r.readAsText(f);e.target.value="";
+}
+document.getElementById("date").value=priceDate;
+render();
+</script>
+</body></html>
