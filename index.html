@@ -101,7 +101,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
 <div id="costModal" class="modal" onclick="if(event.target===this)closeCosts()">
  <div class="box" style="max-width:900px">
   <h2 id="costTitle">Biaya Tambahan Produk</h2>
-  <div class="notice">Semua biaya diinput sebagai biaya untuk setiap 1 kg produk jadi. Biaya kemasan juga dialokasikan per kg produk, bukan per zak. Isi biaya dalam rupiah per kg.</div>
+  <div class="notice">Biaya khusus ini hanya untuk kebutuhan produk tertentu di luar persentase standar. Nilai ditambahkan setelah perhitungan Biaya Produksi, Margin, dan Operasional; biaya khusus tidak dikenai persentase lagi. Masukkan dalam rupiah per 1 kg produk jadi.</div>
   <div class="formgrid">
    <div class="field"><label>Nama biaya</label><input id="costName" maxlength="120" placeholder="Contoh: Kemasan, tenaga kerja, listrik"></div>
    <div class="field"><label>Biaya (Rp per kg produk)</label><input id="costAmount" type="number" min="0" step="1" placeholder="Contoh: 500"></div>
@@ -308,6 +308,8 @@ async function loadProducts(){
   const {data:recipes}=await db.from('komposisi_produk').select('produk_id,bahan_id,jumlah_kg');
   const {data:ingredients}=await db.from('harga_bahan').select('id,harga_2');
   const {data:config}=await db.from('konfigurasi_hpp').select('biaya_produksi_pct,margin_pct,operasional_pct').eq('id',1).maybeSingle();
+  const {data:specialCosts,error:specialCostError}=await db.from('biaya_tambahan_produk').select('produk_id,nama_biaya,biaya_per_kg');
+  if(specialCostError) console.warn('Biaya khusus produk belum dapat dimuat:',specialCostError.message);
   products.forEach(p=>{
    const rr=(recipes||[]).filter(r=>Number(r.produk_id)===Number(p.id));
    p.jumlah_bahan=rr.length;
@@ -318,8 +320,11 @@ async function loadProducts(){
    const margin=subtotal1*mg/100;
    const subtotal2=subtotal1+margin;
    const operasional=subtotal2*op/100;
-   p.biaya_tambahan=biayaProduksi+margin+operasional;
-   p.hpp_akhir=subtotal2+operasional;
+   const biayaKhusus=(specialCosts||[]).filter(c=>Number(c.produk_id)===Number(p.id)).reduce((sum,c)=>sum+(Number(c.biaya_per_kg)||0),0);
+   p.biaya_khusus=biayaKhusus;
+   p.biaya_tambahan=biayaProduksi+margin+operasional+biayaKhusus;
+   // Biaya khusus ditambahkan setelah perhitungan persentase; tidak dikenai persentase lagi.
+   p.hpp_akhir=subtotal2+operasional+biayaKhusus;
   });
   renderProducts();
 }
