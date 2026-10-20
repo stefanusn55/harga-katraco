@@ -306,7 +306,7 @@ async function refreshValidation(){
    renderValidation();
  }catch(err){
    console.error('Validasi produk gagal:',err);
-   alert('Pemeriksaan produk gagal. Coba refresh halaman dan periksa koneksi database.');
+   alert('Pemeriksaan produk gagal: '+(err?.message||String(err))+' . Kirim pesan ini ke ChatGPT agar bisa diperbaiki.');
  }finally{
    if(btn){btn.disabled=false;btn.textContent='↻ Periksa Ulang'}
  }
@@ -397,11 +397,14 @@ async function loadProducts(){
     return;
   }
   products=(rows||[]).map(p=>({...p,jumlah_bahan:0,total_kg:0,missing_price_count:0,hpp_bahan:0,biaya_tambahan:0}));
-  const {data:recipes}=await db.from('komposisi_produk').select('produk_id,bahan_id,jumlah_kg');
-  const {data:ingredients}=await db.from('harga_bahan').select('id,harga_2');
-  const {data:config}=await db.from('konfigurasi_hpp').select('biaya_produksi_pct,margin_pct,operasional_pct').eq('id',1).maybeSingle();
-  const {data:specialCosts,error:specialCostError}=await db.from('biaya_tambahan_produk').select('produk_id,nama_biaya,biaya_per_kg');
-  if(specialCostError) console.warn('Biaya khusus produk belum dapat dimuat:',specialCostError.message);
+  const [{data:recipes,error:eRecipes},{data:ingredients,error:eIngredients},{data:config,error:eConfig},{data:specialCosts,error:specialCostError}]=await Promise.all([
+    db.from('komposisi_produk').select('produk_id,bahan_id,jumlah_kg'),
+    db.from('harga_bahan').select('id,harga_2'),
+    db.from('konfigurasi_hpp').select('biaya_produksi_pct,margin_pct,operasional_pct').eq('id',1).maybeSingle(),
+    db.from('biaya_tambahan_produk').select('produk_id,nama_biaya,biaya_per_kg')
+  ]);
+  const queryError=eRecipes||eIngredients||eConfig||specialCostError;
+  if(queryError){console.error('Gagal memuat data validasi:',queryError);throw new Error(queryError.message||'Kesalahan query database')}
   products.forEach(p=>{
    const rr=(recipes||[]).filter(r=>Number(r.produk_id)===Number(p.id));
    p.jumlah_bahan=rr.length;
