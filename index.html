@@ -288,7 +288,7 @@ function exportExcel(){
 }
 
 
-async function validationInfo(p){
+function validationInfo(p){
  const notes=[];
  if(Number(p.jumlah_bahan||0)===0) notes.push('Belum ada komposisi');
  if(Number(p.jumlah_bahan||0)>0 && Math.abs(Number(p.total_kg||0)-1)>0.001) notes.push('Total bahan bukan 1 kg');
