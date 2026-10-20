@@ -68,8 +68,8 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
       <button id="addProductBtn" class="btn green" onclick="openProductAdd()">＋ Tambah Produk</button>
     </div>
     <div class="table-wrap">
-      <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Produk</th><th>Komposisi</th><th>HPP Bahan/kg</th><th>Aksi</th></tr></thead>
-      <tbody id="productsBody"><tr><td colspan="5" class="empty">Memuat produk...</td></tr></tbody></table>
+      <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Produk</th><th>Komposisi</th><th>Biaya Tambahan/kg</th><th>HPP/kg</th><th>Aksi</th></tr></thead>
+      <tbody id="productsBody"><tr><td colspan="6" class="empty">Memuat produk...</td></tr></tbody></table>
     </div>
   </section>
 </main>
@@ -83,6 +83,23 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
    <div class="field full"><label>Nama Produk</label><input id="productName" maxlength="160"></div>
   </div>
   <div class="modal-actions"><button class="btn gray" onclick="closeProductModal()">Batal</button><button class="btn green" onclick="saveProduct()">Simpan</button></div>
+ </div>
+</div>
+
+<div id="costModal" class="modal" onclick="if(event.target===this)closeCosts()">
+ <div class="box" style="max-width:900px">
+  <h2 id="costTitle">Biaya Tambahan Produk</h2>
+  <div class="notice">Semua biaya diinput sebagai biaya untuk setiap 1 kg produk jadi. Biaya kemasan juga dialokasikan per kg produk, bukan per zak. Isi biaya dalam rupiah per kg.</div>
+  <div class="formgrid">
+   <div class="field"><label>Nama biaya</label><input id="costName" maxlength="120" placeholder="Contoh: Kemasan, tenaga kerja, listrik"></div>
+   <div class="field"><label>Biaya (Rp per kg produk)</label><input id="costAmount" type="number" min="0" step="1" placeholder="Contoh: 500"></div>
+  </div>
+  <div class="modal-actions" style="justify-content:flex-start"><button class="btn green" onclick="addCostItem()">＋ Tambah Biaya</button><button class="btn gray" onclick="loadCosts()">↻ Refresh</button></div>
+  <div class="table-wrap" style="margin-top:14px;max-height:45vh">
+   <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Biaya</th><th class="num">Biaya/kg</th><th>Aksi</th></tr></thead><tbody id="costBody"><tr><td colspan="4" class="empty">Memuat biaya...</td></tr></tbody></table>
+  </div>
+  <div style="display:flex;justify-content:flex-end;gap:18px;flex-wrap:wrap;padding:18px 0;font-weight:800"><span>Total biaya tambahan/kg: <b id="costTotal">Rp 0</b></span></div>
+  <div class="modal-actions"><button class="btn gray" onclick="closeCosts()">Tutup</button></div>
  </div>
 </div>
 
@@ -265,20 +282,29 @@ function switchSection(section){
 }
 async function loadProducts(){
   if(currentRole!=='admin') return;
-  document.getElementById('productsBody').innerHTML='<tr><td colspan="5" class="empty">Memuat produk...</td></tr>';
+  document.getElementById('productsBody').innerHTML='<tr><td colspan="6" class="empty">Memuat produk...</td></tr>';
   const {data:rows,error}=await db.from('produk_jadi').select('id,nama_produk,created_at').order('nama_produk',{ascending:true});
   if(error){
     console.error(error);
-    document.getElementById('productsBody').innerHTML='<tr><td colspan="5" class="empty">Modul produk belum disiapkan di database. Jalankan SQL setup yang disediakan.</td></tr>';
+    document.getElementById('productsBody').innerHTML='<tr><td colspan="6" class="empty">Modul produk belum disiapkan di database. Jalankan SQL setup yang disediakan.</td></tr>';
     return;
   }
-  products=rows||[];
+  products=(rows||[]).map(p=>({...p,jumlah_bahan:0,hpp_bahan:0,biaya_tambahan:0}));
+  const {data:recipes}=await db.from('komposisi_produk').select('produk_id,bahan_id,jumlah_kg');
+  const {data:ingredients}=await db.from('harga_bahan').select('id,harga_2');
+  const {data:costs}=await db.from('biaya_tambahan_produk').select('produk_id,biaya_per_kg');
+  products.forEach(p=>{
+   const rr=(recipes||[]).filter(r=>Number(r.produk_id)===Number(p.id));
+   p.jumlah_bahan=rr.length;
+   p.hpp_bahan=rr.reduce((sum,r)=>sum+(Number(r.jumlah_kg)||0)*(Number((ingredients||[]).find(b=>Number(b.id)===Number(r.bahan_id))?.harga_2)||0),0);
+   p.biaya_tambahan=(costs||[]).filter(c=>Number(c.produk_id)===Number(p.id)).reduce((sum,c)=>sum+(Number(c.biaya_per_kg)||0),0);
+  });
   renderProducts();
 }
 function renderProducts(){
   const q=(document.getElementById('produkSearch')?.value||'').toLowerCase().trim();
   const filtered=[...products].sort((a,b)=>String(a.nama_produk||'').localeCompare(String(b.nama_produk||''),'id',{sensitivity:'base',numeric:true})).filter(p=>String(p.nama_produk||'').toLowerCase().includes(q));
-  document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">${Number(p.jumlah_bahan||0)} bahan</span></td><td class="price">${p.hpp_bahan==null?"-":"Rp "+money(p.hpp_bahan)}</td><td class="row-actions"><button class="icon" onclick="openRecipe(${p.id})">Komposisi</button> <button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">Belum ada produk.</td></tr>';
+  document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">${Number(p.jumlah_bahan||0)} bahan</span></td><td class="price">Rp ${money(p.biaya_tambahan||0)}</td><td class="price">Rp ${money((p.hpp_bahan||0)+(p.biaya_tambahan||0))}</td><td class="row-actions"><button class="icon" onclick="openRecipe(${p.id})">Komposisi</button> <button class="icon" onclick="openCosts(${p.id})">Biaya</button> <button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Belum ada produk.</td></tr>';
 }
 function openProductAdd(){
   if(currentRole!=='admin')return;
@@ -315,6 +341,51 @@ async function deleteProduct(id){
   const {error}=await db.from('produk_jadi').delete().eq('id',id);
   if(error){alert('Gagal menghapus produk: '+error.message);return}
   await loadProducts();
+}
+
+let activeCostProductId=null, costRows=[];
+async function openCosts(productId){
+ if(currentRole!=='admin')return;
+ const prod=products.find(p=>Number(p.id)===Number(productId));if(!prod)return;
+ activeCostProductId=productId;
+ document.getElementById('costTitle').textContent='Biaya Tambahan: '+prod.nama_produk;
+ document.getElementById('costModal').classList.add('show');
+ await loadCosts();
+}
+function closeCosts(){document.getElementById('costModal').classList.remove('show');activeCostProductId=null}
+async function loadCosts(){
+ if(currentRole!=='admin'||!activeCostProductId)return;
+ const {data:rows,error}=await db.from('biaya_tambahan_produk').select('id,produk_id,nama_biaya,biaya_per_kg').eq('produk_id',activeCostProductId).order('nama_biaya',{ascending:true});
+ if(error){document.getElementById('costBody').innerHTML=`<tr><td colspan="4" class="empty">Gagal memuat biaya: ${esc(error.message)}. Pastikan SQL Biaya Tambahan sudah dijalankan.</td></tr>`;return}
+ costRows=rows||[];
+ renderCosts();
+}
+function renderCosts(){
+ const body=document.getElementById('costBody');
+ body.innerHTML=costRows.length?costRows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama_biaya)}</td><td class="num price">Rp ${money(r.biaya_per_kg)}</td><td><button class="icon del" onclick="deleteCostItem(${r.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">Belum ada biaya tambahan.</td></tr>';
+ const total=costRows.reduce((sum,r)=>sum+(Number(r.biaya_per_kg)||0),0);
+ document.getElementById('costTotal').textContent='Rp '+money(total);
+ const p=products.find(x=>Number(x.id)===Number(activeCostProductId));if(p)p.biaya_tambahan=total;
+ renderProducts();
+}
+async function addCostItem(){
+ if(currentRole!=='admin'||!activeCostProductId)return;
+ const nama_biaya=document.getElementById('costName').value.trim();
+ const biaya_per_kg=Number(document.getElementById('costAmount').value);
+ if(!nama_biaya){alert('Nama biaya wajib diisi.');return}
+ if(!Number.isFinite(biaya_per_kg)||biaya_per_kg<0){alert('Biaya harus berupa angka nol atau lebih.');return}
+ if(costRows.some(r=>r.nama_biaya.toLowerCase()===nama_biaya.toLowerCase())){alert('Nama biaya tersebut sudah ada untuk produk ini.');return}
+ const {error}=await db.from('biaya_tambahan_produk').insert({produk_id:activeCostProductId,nama_biaya,biaya_per_kg});
+ if(error){alert('Gagal menyimpan biaya: '+error.message);return}
+ document.getElementById('costName').value='';document.getElementById('costAmount').value='';
+ await loadCosts();
+}
+async function deleteCostItem(id){
+ if(currentRole!=='admin')return;
+ if(!confirm('Hapus biaya tambahan ini?'))return;
+ const {error}=await db.from('biaya_tambahan_produk').delete().eq('id',id);
+ if(error){alert('Gagal menghapus biaya: '+error.message);return}
+ await loadCosts();
 }
 
 let activeProductId=null, recipeRows=[], ingredientRows=[];
