@@ -52,6 +52,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
   <div class="actions" style="margin:0 0 14px">
     <button id="tabBahan" class="btn green" onclick="switchSection('bahan')">Master Bahan Baku</button>
     <button id="tabProduk" class="btn gray" onclick="switchSection('produk')">Master Produk Obat Jadi</button>
+    <button id="tabBiayaStandar" class="btn gray" onclick="switchSection('standar')">Persentase HPP</button>
   </div>
   <section id="bahanSection" class="panel">
     <div class="toolbar">
@@ -68,9 +69,19 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
       <button id="addProductBtn" class="btn green" onclick="openProductAdd()">＋ Tambah Produk</button>
     </div>
     <div class="table-wrap">
-      <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Produk</th><th>Komposisi</th><th>Biaya Tambahan/kg</th><th>HPP/kg</th><th>Aksi</th></tr></thead>
+      <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Produk</th><th>Komposisi</th><th>HPP Bahan/kg</th><th>HPP Akhir/kg</th><th>Aksi</th></tr></thead>
       <tbody id="productsBody"><tr><td colspan="6" class="empty">Memuat produk...</td></tr></tbody></table>
     </div>
+  </section>
+  <section id="standarSection" class="panel" style="display:none">
+    <div class="notice">Persentase berlaku sama untuk semua produk. Urutan perhitungan: Biaya Produksi dari HPP bahan baku, Margin dari subtotal setelah biaya produksi, lalu Operasional dari subtotal setelah margin.</div>
+    <div class="formgrid">
+      <div class="field"><label>Biaya Produksi (%) dari HPP bahan</label><input id="pctProduksi" type="number" min="0" step="0.01" value="8"></div>
+      <div class="field"><label>Margin (%) dari subtotal setelah produksi</label><input id="pctMargin" type="number" min="0" step="0.01" value="5"></div>
+      <div class="field"><label>Operasional (%) dari subtotal setelah margin</label><input id="pctOperasional" type="number" min="0" step="0.01" value="4"></div>
+    </div>
+    <div class="modal-actions" style="justify-content:flex-start"><button class="btn green" onclick="saveHppConfig()">Simpan Persentase</button><button class="btn gray" onclick="loadHppConfig()">Refresh</button></div>
+    <div class="notice" style="margin-top:14px">Rumus: HPP bahan + biaya produksi 8%, lalu margin 5% dari subtotal, lalu operasional 4% dari subtotal setelah margin. Nilai persentase dapat diubah oleh Admin.</div>
   </section>
 </main>
 </div>
@@ -85,6 +96,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
   <div class="modal-actions"><button class="btn gray" onclick="closeProductModal()">Batal</button><button class="btn green" onclick="saveProduct()">Simpan</button></div>
  </div>
 </div>
+
 
 <div id="costModal" class="modal" onclick="if(event.target===this)closeCosts()">
  <div class="box" style="max-width:900px">
@@ -276,8 +288,11 @@ function switchSection(section){
   activeSection=section;
   document.getElementById('bahanSection').style.display=section==='bahan'?'block':'none';
   document.getElementById('produkSection').style.display=section==='produk'?'block':'none';
+  document.getElementById('standarSection').style.display=section==='standar'?'block':'none';
   document.getElementById('tabBahan').className='btn '+(section==='bahan'?'green':'gray');
   document.getElementById('tabProduk').className='btn '+(section==='produk'?'green':'gray');
+  document.getElementById('tabBiayaStandar').className='btn '+(section==='standar'?'green':'gray');
+  if(section==='standar') loadHppConfig();
   if(section==='produk') loadProducts();
 }
 async function loadProducts(){
@@ -292,19 +307,26 @@ async function loadProducts(){
   products=(rows||[]).map(p=>({...p,jumlah_bahan:0,hpp_bahan:0,biaya_tambahan:0}));
   const {data:recipes}=await db.from('komposisi_produk').select('produk_id,bahan_id,jumlah_kg');
   const {data:ingredients}=await db.from('harga_bahan').select('id,harga_2');
-  const {data:costs}=await db.from('biaya_tambahan_produk').select('produk_id,biaya_per_kg');
+  const {data:config}=await db.from('konfigurasi_hpp').select('biaya_produksi_pct,margin_pct,operasional_pct').eq('id',1).maybeSingle();
   products.forEach(p=>{
    const rr=(recipes||[]).filter(r=>Number(r.produk_id)===Number(p.id));
    p.jumlah_bahan=rr.length;
    p.hpp_bahan=rr.reduce((sum,r)=>sum+(Number(r.jumlah_kg)||0)*(Number((ingredients||[]).find(b=>Number(b.id)===Number(r.bahan_id))?.harga_2)||0),0);
-   p.biaya_tambahan=(costs||[]).filter(c=>Number(c.produk_id)===Number(p.id)).reduce((sum,c)=>sum+(Number(c.biaya_per_kg)||0),0);
+   const bp=Number(config?.biaya_produksi_pct??8), mg=Number(config?.margin_pct??5), op=Number(config?.operasional_pct??4);
+   const biayaProduksi=p.hpp_bahan*bp/100;
+   const subtotal1=p.hpp_bahan+biayaProduksi;
+   const margin=subtotal1*mg/100;
+   const subtotal2=subtotal1+margin;
+   const operasional=subtotal2*op/100;
+   p.biaya_tambahan=biayaProduksi+margin+operasional;
+   p.hpp_akhir=subtotal2+operasional;
   });
   renderProducts();
 }
 function renderProducts(){
   const q=(document.getElementById('produkSearch')?.value||'').toLowerCase().trim();
   const filtered=[...products].sort((a,b)=>String(a.nama_produk||'').localeCompare(String(b.nama_produk||''),'id',{sensitivity:'base',numeric:true})).filter(p=>String(p.nama_produk||'').toLowerCase().includes(q));
-  document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">${Number(p.jumlah_bahan||0)} bahan</span></td><td class="price">Rp ${money(p.biaya_tambahan||0)}</td><td class="price">Rp ${money((p.hpp_bahan||0)+(p.biaya_tambahan||0))}</td><td class="row-actions"><button class="icon" onclick="openRecipe(${p.id})">Komposisi</button> <button class="icon" onclick="openCosts(${p.id})">Biaya</button> <button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Belum ada produk.</td></tr>';
+  document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">${Number(p.jumlah_bahan||0)} bahan</span></td><td class="price">Rp ${money(p.hpp_bahan||0)}</td><td class="price">Rp ${money(p.hpp_akhir||0)}</td><td class="row-actions"><button class="icon" onclick="openRecipe(${p.id})">Komposisi</button> <button class="icon" onclick="openCosts(${p.id})">Biaya</button> <button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Belum ada produk.</td></tr>';
 }
 function openProductAdd(){
   if(currentRole!=='admin')return;
@@ -341,6 +363,31 @@ async function deleteProduct(id){
   const {error}=await db.from('produk_jadi').delete().eq('id',id);
   if(error){alert('Gagal menghapus produk: '+error.message);return}
   await loadProducts();
+}
+
+let hppConfig={biaya_produksi_pct:8,margin_pct:5,operasional_pct:4};
+async function loadHppConfig(){
+ if(currentRole!=='admin')return;
+ const {data,error}=await db.from('konfigurasi_hpp').select('id,biaya_produksi_pct,margin_pct,operasional_pct').eq('id',1).maybeSingle();
+ if(error){alert('Gagal memuat konfigurasi HPP: '+error.message+'. Pastikan SQL konfigurasi HPP sudah dijalankan.');return}
+ if(data)hppConfig=data;
+ document.getElementById('pctProduksi').value=hppConfig.biaya_produksi_pct;
+ document.getElementById('pctMargin').value=hppConfig.margin_pct;
+ document.getElementById('pctOperasional').value=hppConfig.operasional_pct;
+ await loadProducts();
+}
+async function saveHppConfig(){
+ if(currentRole!=='admin')return;
+ const biaya_produksi_pct=Number(document.getElementById('pctProduksi').value);
+ const margin_pct=Number(document.getElementById('pctMargin').value);
+ const operasional_pct=Number(document.getElementById('pctOperasional').value);
+ if([biaya_produksi_pct,margin_pct,operasional_pct].some(v=>!Number.isFinite(v)||v<0||v>100)){alert('Persentase harus antara 0 sampai 100.');return}
+ const payload={id:1,biaya_produksi_pct,margin_pct,operasional_pct,updated_at:new Date().toISOString()};
+ const {error}=await db.from('konfigurasi_hpp').upsert(payload,{onConflict:'id'});
+ if(error){alert('Gagal menyimpan persentase HPP: '+error.message);return}
+ hppConfig={biaya_produksi_pct,margin_pct,operasional_pct};
+ alert('Persentase HPP berhasil disimpan.');
+ await loadProducts();
 }
 
 let activeCostProductId=null, costRows=[];
