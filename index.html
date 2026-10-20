@@ -9,7 +9,7 @@
 :root{--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#687386;--line:#e4e9f0;--primary:#0f766e;--primary2:#115e59;--danger:#dc2626;--shadow:0 8px 28px rgba(16,24,40,.07)}
 *{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
 header{background:linear-gradient(135deg,#0f766e,#134e4a);color:#fff;padding:22px 30px}.wrap{max-width:1450px;margin:auto}.brand{display:flex;justify-content:space-between;align-items:center;gap:20px}.brand h1{margin:0;font-size:24px}.brand p{margin:5px 0 0;color:#d7fffa}.actions{display:flex;gap:8px;flex-wrap:wrap}.btn{border:0;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}.btn.primary{background:#fff;color:#0f766e}.btn.green{background:#0f766e;color:#fff}.btn.dark{background:#183b39;color:#fff}.btn.red{background:#fee2e2;color:#991b1b}.btn.gray{background:#eef2f6;color:#334155}.btn:disabled{opacity:.55;cursor:not-allowed}
-main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}.stat{background:var(--card);padding:17px 18px;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}.stat .label{color:var(--muted);font-size:13px}.stat .value{font-size:24px;font-weight:800;margin-top:5px}
+main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}.stat{background:var(--card);padding:17px 18px;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}.stat .label{color:var(--muted);font-size:13px}.stat .value{font-size:24px;font-weight:800;margin-top:5px}
 .panel{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}.toolbar{padding:15px;display:flex;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--line);align-items:center}.search{flex:1;min-width:260px;padding:11px 13px;border:1px solid #d5dce5;border-radius:9px;font-size:14px}.datebox{padding:9px 11px;border:1px solid #d5dce5;border-radius:9px;background:#fff}.table-wrap{overflow:auto;max-height:68vh}table{border-collapse:separate;border-spacing:0;width:100%;min-width:900px}th{position:sticky;top:0;background:#f8fafc;color:#536174;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:12px;border-bottom:1px solid var(--line);z-index:2}td{padding:9px 12px;border-bottom:1px solid #edf1f5;font-size:13px;vertical-align:middle}tr:hover td{background:#fbfffe}td.num,th.num{text-align:right}.price{font-variant-numeric:tabular-nums;white-space:nowrap}.name{font-weight:700}.tag{display:inline-block;background:#edf8f6;color:#0f766e;padding:4px 7px;border-radius:6px;font-size:11px}.row-actions{white-space:nowrap}.icon{border:0;background:#eef2f6;border-radius:7px;padding:7px 9px;cursor:pointer}.icon.del{background:#fee2e2;color:#991b1b}.empty{text-align:center;padding:40px;color:var(--muted)}
 .modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.48);align-items:center;justify-content:center;padding:20px;z-index:10}.modal.show{display:flex}.box{background:#fff;border-radius:16px;max-width:720px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.2)}.box h2{margin:0 0 18px}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:var(--muted);font-weight:700}.field input{padding:10px 11px;border:1px solid #d5dce5;border-radius:9px;font-size:14px}.field input[readonly]{background:#f5f7fa}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.notice{padding:12px 14px;border-radius:10px;background:#eff6ff;color:#1e40af;margin-bottom:14px;font-size:13px}.login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#0f766e,#134e4a)}.login-card{background:#fff;width:100%;max-width:420px;border-radius:18px;padding:28px;box-shadow:0 24px 70px rgba(0,0,0,.2)}.login-card h1{margin:0 0 6px}.login-card p{color:var(--muted);margin:0 0 22px}.login-card .field{margin-bottom:13px}.login-error{display:none;background:#fee2e2;color:#991b1b;padding:10px;border-radius:9px;margin-bottom:12px;font-size:13px}.userbox{display:flex;align-items:center;gap:10px}.role{font-size:11px;background:rgba(255,255,255,.16);padding:4px 7px;border-radius:6px}.status{font-size:12px;color:#d7fffa;margin-top:5px}
 @media(max-width:760px){header{padding:18px}.brand{align-items:flex-start;flex-direction:column}.stats{grid-template-columns:1fr}.formgrid{grid-template-columns:1fr}.field.full{grid-column:auto}.toolbar .btn{width:100%}.search{min-width:100%}}
@@ -76,11 +76,12 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
     </div>
   </section>
   <section id="validasiSection" class="panel" style="display:none">
-    <div class="notice">Pemeriksaan ini membantu menemukan produk yang belum siap dihitung. Formula yang diperiksa adalah total pemakaian bahan untuk menghasilkan 1 kg produk jadi. Periksa status sebelum memakai Harga Jual sebagai acuan.</div>
+    <div class="notice">Pemeriksaan ini membantu menemukan produk yang belum siap dihitung. Target formula acuan adalah 1 kg. Total di bawah 1 kg perlu dilengkapi; total tepat 1 kg sesuai target; total di atas 1 kg dapat diterima untuk antisipasi kehilangan powder saat mixing, tetapi perlu konfirmasi Admin. Pastikan juga harga bahan valid sebelum memakai Harga Jual sebagai acuan.</div>
     <div class="stats" style="margin:14px 0">
       <div class="stat"><div>Produk diperiksa</div><strong id="valTotal">0</strong></div>
       <div class="stat"><div>Perlu diperbaiki</div><strong id="valIssues">0</strong></div>
-      <div class="stat"><div>Siap diperiksa</div><strong id="valReady">0</strong></div>
+      <div class="stat"><div>Sesuai target (1 kg)</div><strong id="valReady">0</strong></div>
+      <div class="stat"><div>Perlu konfirmasi (&gt;1 kg)</div><strong id="valConfirm">0</strong></div>
     </div>
     <div class="toolbar"><input id="validasiSearch" class="search" placeholder="Cari produk atau status..." oninput="renderValidation()"><button class="btn gray" onclick="refreshValidation()">↻ Periksa Ulang</button><button class="btn dark" onclick="exportValidationExcel()">⬇ Excel Validasi</button></div>
     <div class="table-wrap"><table style="min-width:1050px"><thead><tr><th>No</th><th>Nama Produk</th><th>Jumlah Bahan</th><th>Total Pemakaian (kg)</th><th>HPP Bahan/kg</th><th>Biaya Khusus/kg</th><th>Harga Jual/kg</th><th>Status</th><th>Catatan</th></tr></thead><tbody id="validationBody"><tr><td colspan="9" class="empty">Klik Periksa Ulang untuk memeriksa produk.</td></tr></tbody></table></div>
@@ -290,12 +291,18 @@ function exportExcel(){
 
 function validationInfo(p){
  const notes=[];
- if(Number(p.jumlah_bahan||0)===0) notes.push('Belum ada komposisi');
- if(Number(p.jumlah_bahan||0)>0 && Math.abs(Number(p.total_kg||0)-1)>0.001) notes.push('Total bahan bukan 1 kg');
- if(Number(p.missing_price_count||0)>0) notes.push('Ada bahan tanpa Harga 2 valid');
- if(Number(p.hpp_bahan||0)<=0 && Number(p.jumlah_bahan||0)>0) notes.push('HPP bahan Rp 0');
- const ready=notes.length===0;
- return {notes,ready,price:Math.ceil((Number(p.hpp_akhir)||0)/100)*100};
+ const qty=Number(p.total_kg||0);
+ const count=Number(p.jumlah_bahan||0);
+ const tolerance=0.001;
+ let status='Sesuai target';
+ if(count===0){notes.push('Belum ada komposisi');status='Perlu diperbaiki'}
+ else if(qty < 1-tolerance){notes.push('Total bahan kurang dari 1 kg; komposisi perlu dilengkapi');status='Perlu diperbaiki'}
+ else if(qty > 1+tolerance){notes.push('Total di atas 1 kg; dapat diterima untuk antisipasi kehilangan powder, konfirmasi Admin');status='Perlu konfirmasi'}
+ else {notes.push('Total pemakaian sesuai target 1 kg')}
+ if(Number(p.missing_price_count||0)>0){notes.push('Ada bahan tanpa Harga 2 valid');status='Perlu diperbaiki'}
+ if(Number(p.hpp_bahan||0)<=0 && count>0){notes.push('HPP bahan Rp 0');status='Perlu diperbaiki'}
+ const ready=status==='Sesuai target';
+ return {notes,ready,status,price:Math.ceil((Number(p.hpp_akhir)||0)/100)*100};
 }
 async function refreshValidation(){
  if(currentRole!=='admin'){alert('Validasi produk hanya dapat diakses Admin.');return}
@@ -315,17 +322,23 @@ function renderValidation(){
  const body=document.getElementById('validationBody'); if(!body)return;
  const q=(document.getElementById('validasiSearch')?.value||'').toLowerCase().trim();
  const infos=products.map(p=>({p,...validationInfo(p)}));
- const issues=infos.filter(x=>!x.ready).length;
+ const issues=infos.filter(x=>x.status==='Perlu diperbaiki').length;
+ const ready=infos.filter(x=>x.status==='Sesuai target').length;
+ const confirm=infos.filter(x=>x.status==='Perlu konfirmasi').length;
  document.getElementById('valTotal').textContent=String(products.length);
  document.getElementById('valIssues').textContent=String(issues);
- document.getElementById('valReady').textContent=String(infos.length-issues);
- const filtered=infos.filter(x=>(String(x.p.nama_produk||'')+' '+(x.ready?'siap':'perlu diperbaiki')+' '+x.notes.join(' ')).toLowerCase().includes(q));
- body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><strong>${esc(x.p.nama_produk)}</strong></td><td>${Number(x.p.jumlah_bahan||0)}</td><td>${Number(x.p.total_kg||0).toLocaleString('id-ID',{maximumFractionDigits:4})}</td><td class="price">Rp ${money(x.p.hpp_bahan||0)}</td><td class="price">Rp ${money(x.p.biaya_khusus||0)}</td><td class="price">Rp ${money(x.price)}</td><td><span class="tag" style="${x.ready?'background:#dcfce7;color:#166534':'background:#fee2e2;color:#991b1b'}">${x.ready?'Siap diperiksa':'Perlu diperbaiki'}</span></td><td>${x.notes.length?esc(x.notes.join('; ')):'Komposisi dan harga bahan valid'}</td></tr>`).join(''):'<tr><td colspan="9" class="empty">Tidak ada produk yang cocok.</td></tr>';
+ document.getElementById('valReady').textContent=String(ready);
+ document.getElementById('valConfirm').textContent=String(confirm);
+ const filtered=infos.filter(x=>(String(x.p.nama_produk||'')+' '+x.status+' '+x.notes.join(' ')).toLowerCase().includes(q));
+ body.innerHTML=filtered.length?filtered.map((x,i)=>{
+   const style=x.status==='Sesuai target'?'background:#dcfce7;color:#166534':x.status==='Perlu konfirmasi'?'background:#fef3c7;color:#92400e':'background:#fee2e2;color:#991b1b';
+   return `<tr><td>${i+1}</td><td><strong>${esc(x.p.nama_produk)}</strong></td><td>${Number(x.p.jumlah_bahan||0)}</td><td>${Number(x.p.total_kg||0).toLocaleString('id-ID',{maximumFractionDigits:4})}</td><td class="price">Rp ${money(x.p.hpp_bahan||0)}</td><td class="price">Rp ${money(x.p.biaya_khusus||0)}</td><td class="price">Rp ${money(x.price)}</td><td><span class="tag" style="${style}">${esc(x.status)}</span></td><td>${esc(x.notes.join('; '))}</td></tr>`;
+ }).join(''):'<tr><td colspan="9" class="empty">Tidak ada produk yang cocok.</td></tr>';
 }
 function exportValidationExcel(){
  if(typeof XLSX==='undefined'){alert('Library Excel belum tersedia.');return}
  const infos=products.map(p=>({p,...validationInfo(p)}));
- const data=infos.map((x,i)=>({'No':i+1,'Nama Produk':x.p.nama_produk,'Jumlah Bahan':x.p.jumlah_bahan,'Total Pemakaian (kg)':Number(x.p.total_kg||0),'HPP Bahan/kg':Number(x.p.hpp_bahan||0),'Biaya Khusus/kg':Number(x.p.biaya_khusus||0),'Harga Jual/kg':x.price,'Status':x.ready?'Siap diperiksa':'Perlu diperbaiki','Catatan':x.notes.join('; ')}));
+ const data=infos.map((x,i)=>({'No':i+1,'Nama Produk':x.p.nama_produk,'Jumlah Bahan':x.p.jumlah_bahan,'Total Pemakaian (kg)':Number(x.p.total_kg||0),'HPP Bahan/kg':Number(x.p.hpp_bahan||0),'Biaya Khusus/kg':Number(x.p.biaya_khusus||0),'Harga Jual/kg':x.price,'Status':x.status,'Catatan':x.notes.join('; ')}));
  const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Validasi Produk'); XLSX.writeFile(wb,'Validasi_Produk_Katraco.xlsx');
 }
 async function exportHppExcel(){
