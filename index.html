@@ -82,7 +82,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
       <div class="stat"><div>Perlu diperbaiki</div><strong id="valIssues">0</strong></div>
       <div class="stat"><div>Siap diperiksa</div><strong id="valReady">0</strong></div>
     </div>
-    <div class="toolbar"><input id="validasiSearch" class="search" placeholder="Cari produk atau status..." oninput="renderValidation()"><button class="btn gray" onclick="loadProducts()">↻ Periksa Ulang</button><button class="btn dark" onclick="exportValidationExcel()">⬇ Excel Validasi</button></div>
+    <div class="toolbar"><input id="validasiSearch" class="search" placeholder="Cari produk atau status..." oninput="renderValidation()"><button class="btn gray" onclick="refreshValidation()">↻ Periksa Ulang</button><button class="btn dark" onclick="exportValidationExcel()">⬇ Excel Validasi</button></div>
     <div class="table-wrap"><table style="min-width:1050px"><thead><tr><th>No</th><th>Nama Produk</th><th>Jumlah Bahan</th><th>Total Pemakaian (kg)</th><th>HPP Bahan/kg</th><th>Biaya Khusus/kg</th><th>Harga Jual/kg</th><th>Status</th><th>Catatan</th></tr></thead><tbody id="validationBody"><tr><td colspan="9" class="empty">Klik Periksa Ulang untuk memeriksa produk.</td></tr></tbody></table></div>
   </section>
   <section id="standarSection" class="panel" style="display:none">
@@ -296,6 +296,20 @@ async function validationInfo(p){
  if(Number(p.hpp_bahan||0)<=0 && Number(p.jumlah_bahan||0)>0) notes.push('HPP bahan Rp 0');
  const ready=notes.length===0;
  return {notes,ready,price:Math.ceil((Number(p.hpp_akhir)||0)/100)*100};
+}
+async function refreshValidation(){
+ if(currentRole!=='admin'){alert('Validasi produk hanya dapat diakses Admin.');return}
+ const btn=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Periksa Ulang'));
+ if(btn){btn.disabled=true;btn.textContent='Memeriksa...'}
+ try{
+   await loadProducts();
+   renderValidation();
+ }catch(err){
+   console.error('Validasi produk gagal:',err);
+   alert('Pemeriksaan produk gagal. Coba refresh halaman dan periksa koneksi database.');
+ }finally{
+   if(btn){btn.disabled=false;btn.textContent='↻ Periksa Ulang'}
+ }
 }
 function renderValidation(){
  const body=document.getElementById('validationBody'); if(!body)return;
