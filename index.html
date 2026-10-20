@@ -66,6 +66,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
   <section id="produkSection" class="panel" style="display:none">
     <div class="toolbar">
       <input id="produkSearch" class="search" placeholder="Cari nama produk obat jadi..." oninput="renderProducts()">
+      <button class="btn dark" onclick="exportHppExcel()">⬇ Excel Laporan HPP</button>
       <button id="addProductBtn" class="btn green" onclick="openProductAdd()">＋ Tambah Produk</button>
     </div>
     <div class="table-wrap">
@@ -275,6 +276,44 @@ function exportExcel(){
  const blob=new Blob(['\ufeff',xls],{type:'application/vnd.ms-excel'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='Daftar_Harga_Katraco_'+today()+'.xls';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+
+async function exportHppExcel(){
+ if(currentRole!=='admin'){alert('Laporan HPP hanya dapat diekspor oleh Admin.');return}
+ const btn=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Excel Laporan HPP'));
+ if(btn){btn.disabled=true;btn.textContent='Menyiapkan laporan...'}
+ try{
+  const [{data:prods,error:e1},{data:recipes,error:e2},{data:ingredients,error:e3},{data:config,error:e4},{data:specialCosts,error:e5}]=await Promise.all([
+   db.from('produk_jadi').select('id,nama_produk').order('nama_produk',{ascending:true}),
+   db.from('komposisi_produk').select('produk_id,bahan_id,jumlah_kg'),
+   db.from('harga_bahan').select('id,nama_bahan,harga_2'),
+   db.from('konfigurasi_hpp').select('biaya_produksi_pct,margin_pct,operasional_pct').eq('id',1).maybeSingle(),
+   db.from('biaya_tambahan_produk').select('produk_id,nama_biaya,biaya_per_kg')
+  ]);
+  const err=[e1,e2,e3,e4,e5].find(Boolean);if(err)throw err;
+  const bp=Number(config?.biaya_produksi_pct??8),mg=Number(config?.margin_pct??5),op=Number(config?.operasional_pct??4);
+  const ingredientMap=new Map((ingredients||[]).map(x=>[Number(x.id),x]));
+  const specialByProduct=new Map();(specialCosts||[]).forEach(c=>{const id=Number(c.produk_id);if(!specialByProduct.has(id))specialByProduct.set(id,[]);specialByProduct.get(id).push(c)});
+  const escX=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const fmtQty=v=>Number(v||0).toLocaleString('id-ID',{maximumFractionDigits:6});
+  const records=(prods||[]).map((p,i)=>{
+   const rr=(recipes||[]).filter(r=>Number(r.produk_id)===Number(p.id));
+   const composition=rr.map(r=>{const b=ingredientMap.get(Number(r.bahan_id));return `${b?.nama_bahan||'Bahan tidak ditemukan'}: ${fmtQty(r.jumlah_kg)} kg`}).join('; ');
+   const hpp=rr.reduce((sum,r)=>sum+(Number(r.jumlah_kg)||0)*(Number(ingredientMap.get(Number(r.bahan_id))?.harga_2)||0),0);
+   const produksi=hpp*bp/100,sub1=hpp+produksi,margin=sub1*mg/100,sub2=sub1+margin,operasional=sub2*op/100;
+   const costs=specialByProduct.get(Number(p.id))||[];
+   const specialTotal=costs.reduce((sum,c)=>sum+(Number(c.biaya_per_kg)||0),0);
+   const specialDetail=costs.map(c=>`${c.nama_biaya}: Rp ${Math.round(Number(c.biaya_per_kg)||0).toLocaleString('id-ID')}/kg`).join('; ');
+   const final=sub2+operasional+specialTotal;
+   return {no:i+1,nama:p.nama_produk,composition:composition||'Belum ada komposisi',hpp,produksi,sub1,margin,sub2,operasional,specialDetail:specialDetail||'-',specialTotal,final,selling:Math.ceil(final/100)*100};
+  });
+  const numeric=v=>`<td style="mso-number-format:'#,##0';text-align:right">${Math.round(Number(v)||0)}</td>`;
+  const rows=records.map(r=>`<tr><td>${r.no}</td><td>${escX(r.nama)}</td><td>${escX(r.composition)}</td>${numeric(r.hpp)}<td>${bp}%</td>${numeric(r.produksi)}${numeric(r.sub1)}<td>${mg}%</td>${numeric(r.margin)}${numeric(r.sub2)}<td>${op}%</td>${numeric(r.operasional)}<td>${escX(r.specialDetail)}</td>${numeric(r.specialTotal)}${numeric(r.final)}${numeric(r.selling)}</tr>`).join('');
+  const headers='<th>No</th><th>Nama Produk</th><th>Komposisi Bahan (kg untuk 1 kg produk)</th><th>HPP Bahan/kg</th><th>Produksi %</th><th>Biaya Produksi/kg</th><th>Subtotal 1/kg</th><th>Margin %</th><th>Margin/kg</th><th>Subtotal 2/kg</th><th>Operasional %</th><th>Operasional/kg</th><th>Rincian Biaya Khusus</th><th>Total Biaya Khusus/kg</th><th>HPP Akhir sebelum pembulatan/kg</th><th>Harga Jual/kg (dibulatkan ke atas Rp100)</th>';
+  const xls=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:Arial}th{background:#d9e2f3;font-weight:bold;border:1px solid #888;padding:6px}td{border:1px solid #aaa;padding:5px;vertical-align:top}table{border-collapse:collapse}</style></head><body><h2>LAPORAN HPP DAN HARGA JUAL — PT KATRACO SANTIKA</h2><p>Tanggal ekspor: ${escX(new Date().toLocaleDateString('id-ID'))} | Biaya Produksi: ${bp}% | Margin: ${mg}% | Operasional: ${op}%</p><p>Seluruh biaya dihitung per 1 kg produk jadi. Biaya khusus ditambahkan setelah persentase dan tidak dikenai persentase lagi.</p><table><tr>${headers}</tr>${rows}</table></body></html>`;
+  const blob=new Blob(['\ufeff',xls],{type:'application/vnd.ms-excel'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='Laporan_HPP_Harga_Jual_Katraco_'+today()+'.xls';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+ }catch(err){alert('Gagal mengekspor laporan HPP: '+(err?.message||err))}
+ finally{if(btn){btn.disabled=false;btn.textContent='⬇ Excel Laporan HPP'}}
+}
 
 let products = [];
 let editProductId = null;
