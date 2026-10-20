@@ -135,10 +135,10 @@ async function setupHeader(){
 async function loadData(){
  document.getElementById('tbody').innerHTML='<tr><td colspan="9" class="empty">Memuat data...</td></tr>';
  if(currentRole==='admin'){
-   const {data:rows,error}=await db.from('harga_bahan').select('*').order('id',{ascending:true});
+   const {data:rows,error}=await db.from('harga_bahan').select('*').order('nama_bahan',{ascending:true});
    if(error){showDataError(error);return} data=rows||[];
  }else{
-   const {data:rows,error}=await db.from('harga_ts').select('*').order('id',{ascending:true});
+   const {data:rows,error}=await db.from('harga_ts').select('*').order('nama_bahan',{ascending:true});
    if(error){showDataError(error);return} data=rows||[];
  }
  render();
@@ -146,9 +146,14 @@ async function loadData(){
 function showDataError(error){console.error(error);document.getElementById('tbody').innerHTML=`<tr><td colspan="9" class="empty">Gagal memuat data: ${esc(error.message||error)}</td></tr>`}
 async function refreshData(){await loadData()}
 
+function sortByNameAtoZ(items, nameField='nama_bahan'){
+ return [...items].sort((a,b)=>String(a[nameField]||'').localeCompare(String(b[nameField]||''),'id',{sensitivity:'base',numeric:true}));
+}
+
 function render(){
  const q=document.getElementById('search').value.toLowerCase().trim();
- const filtered=data.filter(x=>[x.nama_bahan,x.spesifikasi,x.kemasan].join(' ').toLowerCase().includes(q));
+ const sortedData=sortByNameAtoZ(data);
+ const filtered=sortedData.filter(x=>[x.nama_bahan,x.spesifikasi,x.kemasan].join(' ').toLowerCase().includes(q));
  document.getElementById('statCount').textContent=data.length;
  document.getElementById('statShown').textContent=filtered.length;
  const latest=data.map(x=>x.tanggal_update).filter(Boolean).sort().pop();
@@ -190,7 +195,7 @@ async function delItem(id,nama){
 }
 
 function exportExcel(){
- const rows=data.map((x,i)=> currentRole==='admin'?({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga1:x.harga_1,harga2:x.harga_2,harga3:x.harga_3,update:x.tanggal_update}):({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga3:x.harga_3,update:x.tanggal_update}));
+ const rows=sortByNameAtoZ(data).map((x,i)=> currentRole==='admin'?({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga1:x.harga_1,harga2:x.harga_2,harga3:x.harga_3,update:x.tanggal_update}):({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga3:x.harga_3,update:x.tanggal_update}));
  const escX=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
  const body=rows.map(x=>currentRole==='admin'?`<tr><td>${x.no}</td><td>${escX(x.nama)}</td><td>${escX(x.spesifikasi)}</td><td>${escX(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga1)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga2)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${escX(x.update)}</td></tr>`:`<tr><td>${x.no}</td><td>${escX(x.nama)}</td><td>${escX(x.spesifikasi)}</td><td>${escX(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${escX(x.update)}</td></tr>`).join('');
  const headers=currentRole==='admin'?'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 1</th><th>Harga 2</th><th>Harga 3</th><th>Update</th>':'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 3</th><th>Update</th>';
