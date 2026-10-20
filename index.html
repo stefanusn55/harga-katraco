@@ -68,7 +68,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
       <button id="addProductBtn" class="btn green" onclick="openProductAdd()">＋ Tambah Produk</button>
     </div>
     <div class="table-wrap">
-      <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Produk</th><th>Komposisi</th><th>HPP</th><th>Aksi</th></tr></thead>
+      <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Produk</th><th>Komposisi</th><th>HPP Bahan/kg</th><th>Aksi</th></tr></thead>
       <tbody id="productsBody"><tr><td colspan="5" class="empty">Memuat produk...</td></tr></tbody></table>
     </div>
   </section>
@@ -83,6 +83,23 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
    <div class="field full"><label>Nama Produk</label><input id="productName" maxlength="160"></div>
   </div>
   <div class="modal-actions"><button class="btn gray" onclick="closeProductModal()">Batal</button><button class="btn green" onclick="saveProduct()">Simpan</button></div>
+ </div>
+</div>
+
+<div id="recipeModal" class="modal" onclick="if(event.target===this)closeRecipe()">
+ <div class="box" style="max-width:1000px">
+  <h2 id="recipeTitle">Komposisi Produk</h2>
+  <div class="notice">Formula untuk menghasilkan 1 kg produk jadi. Masukkan jumlah bahan dalam kg. Biaya dihitung otomatis dari Harga 2 per kg. Kemasan pemasok tidak mengubah harga per kg.</div>
+  <div class="formgrid">
+   <div class="field"><label>Bahan Baku</label><select id="recipeIngredient" style="padding:10px;border:1px solid #d5dce5;border-radius:9px"></select></div>
+   <div class="field"><label>Jumlah pemakaian (kg untuk 1 kg produk)</label><input id="recipeQty" type="number" min="0.000001" step="0.000001" placeholder="Contoh: 0,250"></div>
+  </div>
+  <div class="modal-actions" style="justify-content:flex-start"><button class="btn green" onclick="addRecipeItem()">＋ Tambah Bahan</button><button class="btn gray" onclick="loadRecipe()">↻ Refresh Harga</button></div>
+  <div class="table-wrap" style="margin-top:14px;max-height:45vh">
+   <table style="min-width:760px"><thead><tr><th>No</th><th>Bahan Baku</th><th class="num">Qty (kg)</th><th class="num">Harga 2/kg</th><th class="num">Biaya</th><th>Aksi</th></tr></thead><tbody id="recipeBody"><tr><td colspan="6" class="empty">Memuat komposisi...</td></tr></tbody></table>
+  </div>
+  <div style="display:flex;justify-content:flex-end;gap:18px;flex-wrap:wrap;padding:18px 0;font-weight:800"><span>Total pemakaian: <b id="recipeTotalQty">0 kg</b></span><span>HPP bahan per kg produk: <b id="recipeTotalCost">Rp 0</b></span></div>
+  <div class="modal-actions"><button class="btn gray" onclick="closeRecipe()">Tutup</button></div>
  </div>
 </div>
 
@@ -261,7 +278,7 @@ async function loadProducts(){
 function renderProducts(){
   const q=(document.getElementById('produkSearch')?.value||'').toLowerCase().trim();
   const filtered=[...products].sort((a,b)=>String(a.nama_produk||'').localeCompare(String(b.nama_produk||''),'id',{sensitivity:'base',numeric:true})).filter(p=>String(p.nama_produk||'').toLowerCase().includes(q));
-  document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">Belum diisi</span></td><td>-</td><td class="row-actions"><button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">Belum ada produk.</td></tr>';
+  document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">${Number(p.jumlah_bahan||0)} bahan</span></td><td class="price">${p.hpp_bahan==null?"-":"Rp "+money(p.hpp_bahan)}</td><td class="row-actions"><button class="icon" onclick="openRecipe(${p.id})">Komposisi</button> <button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">Belum ada produk.</td></tr>';
 }
 function openProductAdd(){
   if(currentRole!=='admin')return;
@@ -298,6 +315,64 @@ async function deleteProduct(id){
   const {error}=await db.from('produk_jadi').delete().eq('id',id);
   if(error){alert('Gagal menghapus produk: '+error.message);return}
   await loadProducts();
+}
+
+let activeProductId=null, recipeRows=[], ingredientRows=[];
+async function openRecipe(productId){
+ if(currentRole!=='admin')return;
+ const prod=products.find(p=>p.id===productId);if(!prod)return;
+ activeProductId=productId;
+ document.getElementById('recipeTitle').textContent='Komposisi: '+prod.nama_produk;
+ document.getElementById('recipeModal').classList.add('show');
+ await loadIngredientOptions();
+ await loadRecipe();
+}
+function closeRecipe(){document.getElementById('recipeModal').classList.remove('show');activeProductId=null}
+async function loadIngredientOptions(){
+ const sel=document.getElementById('recipeIngredient');
+ sel.innerHTML='<option>Memuat bahan...</option>';
+ const {data:rows,error}=await db.from('harga_bahan').select('id,nama_bahan,harga_2').order('nama_bahan',{ascending:true});
+ if(error){sel.innerHTML='<option value="">Gagal memuat bahan</option>';alert('Gagal memuat bahan baku: '+error.message);return}
+ ingredientRows=rows||[];
+ sel.innerHTML=ingredientRows.map(x=>`<option value="${x.id}">${esc(x.nama_bahan)} — Harga 2 Rp ${money(x.harga_2)}/kg</option>`).join('');
+}
+async function loadRecipe(){
+ if(currentRole!=='admin'||!activeProductId)return;
+ const {data:rows,error}=await db.from('komposisi_produk').select('id,produk_id,bahan_id,jumlah_kg').eq('produk_id',activeProductId);
+ if(error){document.getElementById('recipeBody').innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat komposisi: ${esc(error.message)}. Pastikan SQL Komposisi Produk sudah dijalankan.</td></tr>`;return}
+ recipeRows=rows||[];
+ renderRecipe();
+}
+function renderRecipe(){
+ const body=document.getElementById('recipeBody');
+ const joined=recipeRows.map(r=>({...r,bahan:ingredientRows.find(b=>String(b.id)===String(r.bahan_id))})).sort((a,b)=>String(a.bahan?.nama_bahan||'').localeCompare(String(b.bahan?.nama_bahan||''),'id',{sensitivity:'base'}));
+ body.innerHTML=joined.length?joined.map((r,i)=>{const price=Number(r.bahan?.harga_2)||0;const qty=Number(r.jumlah_kg)||0;return `<tr><td>${i+1}</td><td>${esc(r.bahan?.nama_bahan||'Bahan tidak ditemukan')}</td><td class="num">${qty.toLocaleString('id-ID',{maximumFractionDigits:6})}</td><td class="num price">Rp ${money(price)}</td><td class="num price">Rp ${money(qty*price)}</td><td><button class="icon del" onclick="deleteRecipeItem(${r.id})">Hapus</button></td></tr>`}).join(''):'<tr><td colspan="6" class="empty">Belum ada bahan dalam komposisi.</td></tr>';
+ const totalQty=joined.reduce((sum,r)=>sum+(Number(r.jumlah_kg)||0),0);
+ const totalCost=joined.reduce((sum,r)=>sum+(Number(r.jumlah_kg)||0)*(Number(r.bahan?.harga_2)||0),0);
+ document.getElementById('recipeTotalQty').textContent=totalQty.toLocaleString('id-ID',{maximumFractionDigits:6})+' kg';
+ document.getElementById('recipeTotalCost').textContent='Rp '+money(totalCost);
+ const p=products.find(x=>x.id===activeProductId);if(p){p.jumlah_bahan=joined.length;p.hpp_bahan=totalCost}
+ renderProducts();
+}
+async function addRecipeItem(){
+ if(currentRole!=='admin'||!activeProductId)return;
+ const bahan_id=Number(document.getElementById('recipeIngredient').value);
+ const jumlah_kg=Number(document.getElementById('recipeQty').value);
+ if(!bahan_id){alert('Pilih bahan baku.');return}
+ if(!Number.isFinite(jumlah_kg)||jumlah_kg<=0){alert('Jumlah pemakaian harus lebih besar dari 0 kg.');return}
+ const exists=recipeRows.find(r=>Number(r.bahan_id)===bahan_id);
+ if(exists){alert('Bahan ini sudah ada. Hapus dulu jika ingin mengganti jumlahnya.');return}
+ const {error}=await db.from('komposisi_produk').insert({produk_id:activeProductId,bahan_id,jumlah_kg});
+ if(error){alert('Gagal menyimpan komposisi: '+error.message);return}
+ document.getElementById('recipeQty').value='';
+ await loadRecipe();
+}
+async function deleteRecipeItem(id){
+ if(currentRole!=='admin')return;
+ if(!confirm('Hapus bahan ini dari komposisi produk?'))return;
+ const {error}=await db.from('komposisi_produk').delete().eq('id',id);
+ if(error){alert('Gagal menghapus bahan: '+error.message);return}
+ await loadRecipe();
 }
 
 db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){showLogin()}else if(session&&!currentUser){setTimeout(startApp,0)}});
