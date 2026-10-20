@@ -49,7 +49,11 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
     <div class="stat"><div class="label">Data Ditampilkan</div><div id="statShown" class="value">-</div></div>
     <div class="stat"><div class="label">Harga Update</div><div id="statDate" class="value">-</div></div>
   </div>
-  <section class="panel">
+  <div class="actions" style="margin:0 0 14px">
+    <button id="tabBahan" class="btn green" onclick="switchSection('bahan')">Master Bahan Baku</button>
+    <button id="tabProduk" class="btn gray" onclick="switchSection('produk')">Master Produk Obat Jadi</button>
+  </div>
+  <section id="bahanSection" class="panel">
     <div class="toolbar">
       <input id="search" class="search" placeholder="Cari nama bahan, spesifikasi, atau kemasan..." oninput="render()">
       <input id="date" class="datebox" type="date" disabled>
@@ -58,7 +62,28 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);g
       <table><thead id="thead"></thead><tbody id="tbody"><tr><td class="empty">Memuat data...</td></tr></tbody></table>
     </div>
   </section>
+  <section id="produkSection" class="panel" style="display:none">
+    <div class="toolbar">
+      <input id="produkSearch" class="search" placeholder="Cari nama produk obat jadi..." oninput="renderProducts()">
+      <button id="addProductBtn" class="btn green" onclick="openProductAdd()">＋ Tambah Produk</button>
+    </div>
+    <div class="table-wrap">
+      <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Produk</th><th>Komposisi</th><th>HPP</th><th>Aksi</th></tr></thead>
+      <tbody id="productsBody"><tr><td colspan="5" class="empty">Memuat produk...</td></tr></tbody></table>
+    </div>
+  </section>
 </main>
+</div>
+
+<div id="productModal" class="modal" onclick="if(event.target===this)closeProductModal()">
+ <div class="box">
+  <h2 id="productModalTitle">Tambah Produk</h2>
+  <div class="notice">Masukkan nama produk saja terlebih dahulu. Harga jual dari Excel tidak diimpor. Komposisi, biaya, HPP, dan harga jual akan kita buat pada tahap berikutnya.</div>
+  <div class="formgrid">
+   <div class="field full"><label>Nama Produk</label><input id="productName" maxlength="160"></div>
+  </div>
+  <div class="modal-actions"><button class="btn gray" onclick="closeProductModal()">Batal</button><button class="btn green" onclick="saveProduct()">Simpan</button></div>
+ </div>
 </div>
 
 <div id="modal" class="modal" onclick="if(event.target===this)closeModal()">
@@ -119,6 +144,7 @@ async function startApp(){
  currentRole=profile.role;currentName=profile.nama||user.email||'';
  document.getElementById('userStatus').innerHTML=`Login: <b>${esc(currentName)}</b> <span class="role">${currentRole.toUpperCase()}</span>`;
  document.getElementById('addBtn').style.display=currentRole==='admin'?'inline-block':'none';
+  document.getElementById('tabProduk').style.display=currentRole==='admin'?'inline-block':'none';
  document.getElementById('tsNotice').style.display=currentRole==='ts'?'block':'none';
  document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='block';
  setupHeader();await loadData();
@@ -201,6 +227,77 @@ function exportExcel(){
  const headers=currentRole==='admin'?'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 1</th><th>Harga 2</th><th>Harga 3</th><th>Update</th>':'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 3</th><th>Update</th>';
  const xls=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:Arial}th{background:#d9e2f3;font-weight:bold;border:1px solid #888;padding:6px}td{border:1px solid #aaa;padding:5px}</style></head><body><h2>DAFTAR HARGA BAHAN BAKU - PT KATRACO SANTIKA</h2><div>Harga Update: ${escX(new Date().toLocaleDateString('id-ID'))}</div><br><table border="1"><tr>${headers}</tr>${body}</table></body></html>`;
  const blob=new Blob(['\ufeff',xls],{type:'application/vnd.ms-excel'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='Daftar_Harga_Katraco_'+today()+'.xls';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+
+let products = [];
+let editProductId = null;
+let activeSection = 'bahan';
+
+function switchSection(section){
+  if(currentRole!=='admin' && section==='produk'){
+    alert('Modul produk obat jadi hanya dapat diakses Admin.');
+    return;
+  }
+  activeSection=section;
+  document.getElementById('bahanSection').style.display=section==='bahan'?'block':'none';
+  document.getElementById('produkSection').style.display=section==='produk'?'block':'none';
+  document.getElementById('tabBahan').className='btn '+(section==='bahan'?'green':'gray');
+  document.getElementById('tabProduk').className='btn '+(section==='produk'?'green':'gray');
+  if(section==='produk') loadProducts();
+}
+async function loadProducts(){
+  if(currentRole!=='admin') return;
+  document.getElementById('productsBody').innerHTML='<tr><td colspan="5" class="empty">Memuat produk...</td></tr>';
+  const {data:rows,error}=await db.from('produk_jadi').select('id,nama_produk,created_at').order('nama_produk',{ascending:true});
+  if(error){
+    console.error(error);
+    document.getElementById('productsBody').innerHTML='<tr><td colspan="5" class="empty">Modul produk belum disiapkan di database. Jalankan SQL setup yang disediakan.</td></tr>';
+    return;
+  }
+  products=rows||[];
+  renderProducts();
+}
+function renderProducts(){
+  const q=(document.getElementById('produkSearch')?.value||'').toLowerCase().trim();
+  const filtered=[...products].sort((a,b)=>String(a.nama_produk||'').localeCompare(String(b.nama_produk||''),'id',{sensitivity:'base',numeric:true})).filter(p=>String(p.nama_produk||'').toLowerCase().includes(q));
+  document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">Belum diisi</span></td><td>-</td><td class="row-actions"><button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">Belum ada produk.</td></tr>';
+}
+function openProductAdd(){
+  if(currentRole!=='admin')return;
+  editProductId=null;
+  document.getElementById('productModalTitle').textContent='Tambah Produk';
+  document.getElementById('productName').value='';
+  document.getElementById('productModal').classList.add('show');
+}
+function openProductEdit(id){
+  if(currentRole!=='admin')return;
+  const p=products.find(x=>x.id===id); if(!p)return;
+  editProductId=id;
+  document.getElementById('productModalTitle').textContent='Edit Produk';
+  document.getElementById('productName').value=p.nama_produk||'';
+  document.getElementById('productModal').classList.add('show');
+}
+function closeProductModal(){document.getElementById('productModal').classList.remove('show')}
+async function saveProduct(){
+  if(currentRole!=='admin')return;
+  const nama_produk=document.getElementById('productName').value.trim();
+  if(!nama_produk){alert('Nama produk wajib diisi.');return}
+  const btn=document.querySelector('#productModal .btn.green');btn.disabled=true;btn.textContent='Menyimpan...';
+  const result=editProductId===null
+    ? await db.from('produk_jadi').insert({nama_produk}).select().single()
+    : await db.from('produk_jadi').update({nama_produk}).eq('id',editProductId);
+  btn.disabled=false;btn.textContent='Simpan';
+  if(result.error){alert('Gagal menyimpan produk: '+result.error.message);return}
+  closeProductModal();await loadProducts();
+}
+async function deleteProduct(id){
+  if(currentRole!=='admin')return;
+  const p=products.find(x=>x.id===id);if(!p)return;
+  if(!confirm('Hapus produk '+p.nama_produk+'?'))return;
+  const {error}=await db.from('produk_jadi').delete().eq('id',id);
+  if(error){alert('Gagal menghapus produk: '+error.message);return}
+  await loadProducts();
 }
 
 db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){showLogin()}else if(session&&!currentUser){setTimeout(startApp,0)}});
