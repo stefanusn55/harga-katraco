@@ -526,6 +526,12 @@ async function loadProducts(){
 function renderProducts(){
    const q=(document.getElementById('produkSearch')?.value||'').toLowerCase().trim();
    const filtered=[...products].sort((a,b)=>String(a.nama_produk||'').localeCompare(String(b.nama_produk||''),'id',{sensitivity:'base',numeric:true})).filter(p=>String(p.nama_produk||'').toLowerCase().includes(q));
+   // Saat TS membuka Produk Jadi, kartu ringkasan mengikuti jumlah produk,
+   // bukan jumlah bahan baku dari menu sebelumnya.
+   if(currentRole==='ts' && activeSection==='produk'){
+     document.getElementById('statCount').textContent=products.length;
+     document.getElementById('statShown').textContent=filtered.length;
+   }
    if(currentRole==='ts'){
      document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td class="num price"><b>Rp ${money(p.harga_jual)}</b></td></tr>`).join(''):'<tr><td colspan="3" class="empty">Belum ada produk.</td></tr>';
      return;
