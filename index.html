@@ -67,7 +67,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
   <section id="produkSection" class="panel" style="display:none">
     <div class="toolbar">
       <input id="produkSearch" class="search" placeholder="Cari nama produk obat jadi..." oninput="renderProducts()">
-      <button class="btn dark" onclick="exportHppExcel()">⬇ Excel Laporan HPP</button>
+      <button id="exportHppBtn" class="btn dark" onclick="exportHppExcel()">⬇ Excel Laporan HPP</button>
       <button id="addProductBtn" class="btn green" onclick="openProductAdd()">＋ Tambah Produk</button>
     </div>
     <div class="table-wrap">
@@ -203,10 +203,17 @@ async function startApp(){
  currentRole=profile.role;currentName=profile.nama||user.email||'';
  document.getElementById('userStatus').innerHTML=`Login: <b>${esc(currentName)}</b> <span class="role">${currentRole.toUpperCase()}</span>`;
  document.getElementById('addBtn').style.display=currentRole==='admin'?'inline-block':'none';
-  document.getElementById('tabProduk').style.display=currentRole==='admin'?'inline-block':'none';
+  document.getElementById('tabProduk').style.display='inline-block';
+  document.getElementById('tabBiayaStandar').style.display=currentRole==='admin'?'inline-block':'none';
+  document.getElementById('tabValidasi').style.display=currentRole==='admin'?'inline-block':'none';
+  document.getElementById('addProductBtn').style.display=currentRole==='admin'?'inline-block':'none';
  document.getElementById('tsNotice').style.display=currentRole==='ts'?'block':'none';
  document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='block';
- setupHeader();await loadData();
+ setupHeader();
+  const productHead=document.querySelector('#produkSection thead');
+  if(currentRole==='ts'){productHead.innerHTML='<tr><th>No</th><th>Nama Produk Obat Jadi</th><th class="num">Harga Jual/kg</th></tr>';document.getElementById('exportHppBtn').style.display='none';document.getElementById('addProductBtn').style.display='none';}
+  else {document.getElementById('exportHppBtn').style.display='inline-block';}
+  await loadData();
 }
 function showLogin(){document.getElementById('appView').style.display='none';document.getElementById('loginView').style.display='flex'}
 async function logout(){await db.auth.signOut();currentUser=null;currentRole=null;data=[];showLogin()}
@@ -384,10 +391,7 @@ let editProductId = null;
 let activeSection = 'bahan';
 
 function switchSection(section){
-  if(currentRole!=='admin' && section==='produk'){
-    alert('Modul produk obat jadi hanya dapat diakses Admin.');
-    return;
-  }
+  if(currentRole!=='admin' && ['standar','validasi'].includes(section)) return;
   activeSection=section;
   document.getElementById('bahanSection').style.display=section==='bahan'?'block':'none';
   document.getElementById('produkSection').style.display=section==='produk'?'block':'none';
@@ -401,8 +405,13 @@ function switchSection(section){
   if(section==='produk' || section==='validasi') loadProducts();
 }
 async function loadProducts(){
-  if(currentRole!=='admin') return;
   document.getElementById('productsBody').innerHTML='<tr><td colspan="6" class="empty">Memuat produk...</td></tr>';
+  if(currentRole==='ts'){
+    const {data:rows,error}=await db.rpc('daftar_harga_jual_ts');
+    if(error){console.error(error);document.getElementById('productsBody').innerHTML='<tr><td colspan="3" class="empty">Daftar harga jual belum tersedia. Admin perlu menjalankan SQL pengaturan akses TS yang disertakan.</td></tr>';return;}
+    products=(rows||[]).map((p,i)=>({id:i+1,nama_produk:p.nama_produk,harga_jual:Number(p.harga_jual)||0}));
+    renderProducts();return;
+  }
   const {data:rows,error}=await db.from('produk_jadi').select('id,nama_produk,created_at').order('nama_produk',{ascending:true});
   if(error){
     console.error(error);
@@ -440,9 +449,13 @@ async function loadProducts(){
   if(activeSection==='validasi') renderValidation();
 }
 function renderProducts(){
-  const q=(document.getElementById('produkSearch')?.value||'').toLowerCase().trim();
-  const filtered=[...products].sort((a,b)=>String(a.nama_produk||'').localeCompare(String(b.nama_produk||''),'id',{sensitivity:'base',numeric:true})).filter(p=>String(p.nama_produk||'').toLowerCase().includes(q));
-  document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">${Number(p.jumlah_bahan||0)} bahan</span></td><td class="price">Rp ${money(p.hpp_bahan||0)}</td><td class="price">Rp ${money(Math.ceil((Number(p.hpp_akhir)||0)/100)*100)}</td><td class="row-actions"><button class="icon" onclick="openRecipe(${p.id})">Komposisi</button> <button class="icon" onclick="openCosts(${p.id})">Biaya</button> <button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Belum ada produk.</td></tr>';
+   const q=(document.getElementById('produkSearch')?.value||'').toLowerCase().trim();
+   const filtered=[...products].sort((a,b)=>String(a.nama_produk||'').localeCompare(String(b.nama_produk||''),'id',{sensitivity:'base',numeric:true})).filter(p=>String(p.nama_produk||'').toLowerCase().includes(q));
+   if(currentRole==='ts'){
+     document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td class="num price"><b>Rp ${money(p.harga_jual)}</b></td></tr>`).join(''):'<tr><td colspan="3" class="empty">Belum ada produk.</td></tr>';
+     return;
+   }
+   document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td><span class="tag">${Number(p.jumlah_bahan||0)} bahan</span></td><td class="price">Rp ${money(p.hpp_bahan||0)}</td><td class="price">Rp ${money(Math.ceil((Number(p.hpp_akhir)||0)/100)*100)}</td><td class="row-actions"><button class="icon" onclick="openRecipe(${p.id})">Komposisi</button> <button class="icon" onclick="openCosts(${p.id})">Biaya</button> <button class="icon" onclick="openProductEdit(${p.id})">Edit</button> <button class="icon del" onclick="deleteProduct(${p.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Belum ada produk.</td></tr>';
 }
 function openProductAdd(){
   if(currentRole!=='admin')return;
