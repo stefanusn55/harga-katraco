@@ -52,7 +52,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
   <div class="actions" style="margin:0 0 14px">
     <button id="tabBahan" class="btn green" onclick="switchSection('bahan')">Bahan Baku</button>
     <button id="tabProduk" class="btn gray" onclick="switchSection('produk')">Produk Jadi</button>
-    <button id="tabDna" class="btn gray" onclick="switchSection('dna')" style="display:none">Bahan DNA</button>
+    <button id="tabDna" class="btn gray" onclick="switchSection('dna')" style="display:none">DNA</button>
     <button id="tabBiayaStandar" class="btn gray" onclick="switchSection('standar')">Persentase HPP</button>
     <button id="tabValidasi" class="btn gray" onclick="switchSection('validasi')">Validasi Produk</button>
   </div>
@@ -83,7 +83,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
     </div>
     <div class="table-wrap">
       <table style="min-width:700px"><thead><tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr></thead>
-      <tbody id="dnaBody"><tr><td colspan="6" class="empty">Klik menu Bahan DNA untuk memuat data.</td></tr></tbody></table>
+      <tbody id="dnaBody"><tr><td colspan="6" class="empty">Klik menu DNA untuk memuat data.</td></tr></tbody></table>
     </div>
   </section>
   <section id="validasiSection" class="panel" style="display:none">
@@ -450,15 +450,15 @@ function switchSection(section){
 }
 async function loadDnaMaterials(){
   const body=document.getElementById('dnaBody');
-  body.innerHTML='<tr><td colspan="6" class="empty">Memuat bahan DNA...</td></tr>';
+  body.innerHTML='<tr><td colspan="6" class="empty">Memuat data DNA...</td></tr>';
   const source=currentRole==='admin'?'harga_bahan':'harga_ts';
   const {data:rows,error}=await db.from(source).select('id,nama_bahan,spesifikasi,kemasan,harga_3,tanggal_update').or('nama_bahan.ilike.%DNA%,spesifikasi.ilike.%DNA%').order('nama_bahan',{ascending:true});
   if(error){
-    console.error('Gagal memuat bahan DNA:',error);
-    body.innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat bahan DNA: ${esc(error.message||error)}</td></tr>`;
+    console.error('Gagal memuat data DNA:',error);
+    body.innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat data DNA: ${esc(error.message||error)}</td></tr>`;
     return;
   }
-  // Exclude bahan yang tidak ingin ditampilkan pada menu TS Bahan DNA.
+  // Exclude bahan yang tidak ingin ditampilkan pada menu DNA untuk TS.
   const excludedDnaTerms=['amprolium','levamisol','streptomycin sulphate-dna','trimethoprim'];
   dnaMaterials=(rows||[]).filter(x=>{
     const text=[x.nama_bahan,x.spesifikasi].join(' ').toLowerCase();
