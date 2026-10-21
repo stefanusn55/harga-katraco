@@ -458,7 +458,12 @@ async function loadDnaMaterials(){
     body.innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat bahan DNA: ${esc(error.message||error)}</td></tr>`;
     return;
   }
-  dnaMaterials=rows||[];
+  // Exclude bahan yang tidak ingin ditampilkan pada menu TS Bahan DNA.
+  const excludedDnaTerms=['amprolium','levamisol','streptomycin sulphate-dna','trimethoprim'];
+  dnaMaterials=(rows||[]).filter(x=>{
+    const text=[x.nama_bahan,x.spesifikasi].join(' ').toLowerCase();
+    return !excludedDnaTerms.some(term=>text.includes(term));
+  });
   renderDna();
 }
 function renderDna(){
