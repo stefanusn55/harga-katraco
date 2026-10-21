@@ -22,9 +22,21 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
     <h1>PT Katraco Santika</h1>
     <p>Price Update — Login untuk mengakses daftar harga.</p>
     <div id="loginError" class="login-error"></div>
-    <div class="field"><label>Email</label><input id="loginEmail" type="email" autocomplete="username" placeholder="nama@email.com"></div>
-    <div class="field"><label>Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password"></div>
+    <div class="field"><label>Username Admin / Email TS</label><input id="loginEmail" type="text" autocomplete="username" placeholder="adminkaposantika"></div>
+    <div class="field"><label>Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Masukkan password"></div>
+    <p style="font-size:12px;margin:2px 0 0;color:#687386">Admin masuk dengan username. Untuk sementara, TS tetap menggunakan email terdaftar.</p>
     <button id="loginBtn" class="btn green" style="width:100%;margin-top:4px" onclick="login()">Masuk</button>
+  </div>
+</div>
+
+<div id="recoveryView" class="login" style="display:none">
+  <div class="login-card">
+    <h1>Atur Password Baru</h1>
+    <p>Masukkan password baru untuk akun Admin. Jangan bagikan password ini kepada siapa pun.</p>
+    <div id="recoveryMessage" class="login-error"></div>
+    <div class="field"><label>Password Baru</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="Minimal 8 karakter"></div>
+    <div class="field"><label>Ulangi Password Baru</label><input id="confirmNewPassword" type="password" autocomplete="new-password" placeholder="Ketik ulang password baru"></div>
+    <button id="saveNewPasswordBtn" class="btn green" style="width:100%;margin-top:4px" onclick="submitPasswordRecovery()">Simpan Password Baru</button>
   </div>
 </div>
 
@@ -188,17 +200,63 @@ function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&l
 function today(){return new Date().toISOString().slice(0,10)}
 function fmtDate(v){return v?new Date(v+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}):'-'}
 function toast(msg){console.log(msg)}
+let isPasswordRecovery = false;
+
+function showRecoveryView(){
+ isPasswordRecovery=true;
+ document.getElementById('loginView').style.display='none';
+ document.getElementById('appView').style.display='none';
+ document.getElementById('recoveryView').style.display='flex';
+}
+
+async function submitPasswordRecovery(){
+ const password=document.getElementById('newPassword').value;
+ const confirmPassword=document.getElementById('confirmNewPassword').value;
+ const msg=document.getElementById('recoveryMessage');
+ const btn=document.getElementById('saveNewPasswordBtn');
+ msg.style.display='none';
+ if(password.length<8){msg.textContent='Password minimal 8 karakter.';msg.style.display='block';return}
+ if(password!==confirmPassword){msg.textContent='Ulangan password tidak sama.';msg.style.display='block';return}
+ btn.disabled=true;btn.textContent='Menyimpan...';
+ const {error}=await db.auth.updateUser({password});
+ btn.disabled=false;btn.textContent='Simpan Password Baru';
+ if(error){msg.textContent='Password belum berhasil diubah: '+error.message;msg.style.display='block';return}
+ document.getElementById('newPassword').value='';
+ document.getElementById('confirmNewPassword').value='';
+ isPasswordRecovery=false;
+ await db.auth.signOut();
+ document.getElementById('recoveryView').style.display='none';
+ document.getElementById('loginView').style.display='flex';
+ const loginError=document.getElementById('loginError');
+ loginError.textContent='Password baru berhasil disimpan. Silakan login menggunakan username adminkaposantika dan password baru.';
+ loginError.style.display='block';
+ if(window.history && window.history.replaceState) window.history.replaceState({},document.title,window.location.pathname);
+}
 
 async function login(){
- const email=document.getElementById('loginEmail').value.trim();
+ const loginId=document.getElementById('loginEmail').value.trim();
  const password=document.getElementById('loginPassword').value;
  const err=document.getElementById('loginError');
  err.style.display='none';
- if(!email||!password){err.textContent='Email dan password wajib diisi.';err.style.display='block';return}
+ if(!loginId||!password){err.textContent='Username/email dan password wajib diisi.';err.style.display='block';return}
+ // Tahap 1: username untuk Admin dipetakan ke email akun Supabase Admin yang sudah ada.
+ // TS tetap dapat login dengan email terdaftar sampai tahap username TS dibuat.
+ const adminUsername='adminkaposantika';
+ const adminEmail='stefanuss55@gmail.com';
+ let email='';
+ if(loginId.includes('@')){
+   email=loginId;
+ }else if(loginId.toLowerCase()===adminUsername){
+   email=adminEmail;
+ }else{
+   err.textContent='Username Admin belum cocok. Gunakan adminkaposantika untuk Admin; akun TS sementara menggunakan email terdaftar.';
+   err.style.display='block';
+   return;
+ }
  const btn=document.getElementById('loginBtn');btn.disabled=true;btn.textContent='Memproses...';
  const {error}=await db.auth.signInWithPassword({email,password});
  btn.disabled=false;btn.textContent='Masuk';
- if(error){err.textContent=error.message.includes('Invalid login credentials')?'Email atau password salah.':error.message;err.style.display='block';return}
+ if(error){err.textContent=error.message.includes('Invalid login credentials')?'Username/email atau password salah.':error.message;err.style.display='block';return}
  await startApp();
 }
 
@@ -206,7 +264,9 @@ document.getElementById('loginPassword').addEventListener('keydown',e=>{if(e.key
 document.getElementById('loginEmail').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 
 async function startApp(){
+ if(isPasswordRecovery)return;
  const {data:{user}}=await db.auth.getUser();
+ if(isPasswordRecovery)return;
  if(!user){showLogin();return}
  currentUser=user;
  const {data:profile,error}=await db.from('profiles').select('nama,role').eq('id',user.id).maybeSingle();
@@ -227,7 +287,7 @@ async function startApp(){
   else {document.getElementById('exportHppBtn').style.display='inline-block';}
   await loadData();
 }
-function showLogin(){document.getElementById('appView').style.display='none';document.getElementById('loginView').style.display='flex'}
+function showLogin(){document.getElementById('appView').style.display='none';document.getElementById('recoveryView').style.display='none';document.getElementById('loginView').style.display='flex'}
 async function logout(){await db.auth.signOut();currentUser=null;currentRole=null;data=[];showLogin()}
 
 async function setupHeader(){
@@ -703,7 +763,11 @@ async function deleteRecipeItem(id){
  await loadRecipe();
 }
 
-db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){showLogin()}else if(session&&!currentUser){setTimeout(startApp,0)}});
+db.auth.onAuthStateChange((event,session)=>{
+ if(event==='PASSWORD_RECOVERY'){showRecoveryView();return}
+ if(event==='SIGNED_OUT'){showLogin()}
+ else if(session&&!currentUser&&!isPasswordRecovery){setTimeout(startApp,0)}
+});
 startApp();
 </script>
 </body>
