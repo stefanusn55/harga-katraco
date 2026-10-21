@@ -43,7 +43,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
   </div>
 </div></header>
 <main class="wrap">
-  <div id="tsNotice" class="notice" style="display:none">Anda login sebagai <b>TS</b>. Halaman ini hanya menampilkan <b>Harga 3</b>. Perubahan harga hanya dapat dilakukan oleh Admin.</div>
+  <div id="tsNotice" class="notice" style="display:none">Anda login sebagai <b>TS</b>. Master Bahan Baku hanya menampilkan daftar bahan yang ditentukan dan kolom <b>Harga Cust</b>. Anda juga dapat melihat daftar produk jadi beserta harga jualnya.</div>
   <div class="stats">
     <div class="stat"><div class="label">Jumlah Item</div><div id="statCount" class="value">-</div></div>
     <div class="stat"><div class="label">Data Ditampilkan</div><div id="statShown" class="value">-</div></div>
@@ -221,7 +221,34 @@ async function logout(){await db.auth.signOut();currentUser=null;currentRole=nul
 async function setupHeader(){
  const th=document.getElementById('thead');
  if(currentRole==='admin') th.innerHTML='<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga 1</th><th class="num">Harga 2</th><th class="num">Harga 3</th><th>Update</th><th>Aksi</th></tr>';
- else th.innerHTML='<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga 3</th><th>Update</th></tr>';
+ else th.innerHTML='<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr>';
+}
+
+const TS_ALLOWED_MATERIALS = [
+ 'Benzalkonium Chloride 50',
+ 'Choline Chloride 60%',
+ 'DL Methionine 99%',
+ 'Lysine HCL',
+ 'Sulfadiazine Base',
+ 'Threonine',
+ 'Tocin Binder HS 100',
+ 'Tritophan',
+ 'Tylosine Tartrate',
+ 'Vitamin C Uncoated',
+ 'Vitamin C Coated'
+];
+function normalizeMaterialName(v){
+ return String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+}
+function isAllowedTSMaterial(name){
+ const n=normalizeMaterialName(name);
+ return TS_ALLOWED_MATERIALS.some(allowed=>{
+   const a=normalizeMaterialName(allowed);
+   if(n===a) return true;
+   // Accommodate common spelling variant in the supplied list.
+   if(a==='tritophan' && (n==='tryptophan'||n==='ltryptophan')) return true;
+   return false;
+ });
 }
 
 async function loadData(){
@@ -231,7 +258,7 @@ async function loadData(){
    if(error){showDataError(error);return} data=rows||[];
  }else{
    const {data:rows,error}=await db.from('harga_ts').select('*').order('nama_bahan',{ascending:true});
-   if(error){showDataError(error);return} data=rows||[];
+   if(error){showDataError(error);return} data=(rows||[]).filter(x=>isAllowedTSMaterial(x.nama_bahan));
  }
  render();
 }
@@ -290,7 +317,7 @@ function exportExcel(){
  const rows=sortByNameAtoZ(data).map((x,i)=> currentRole==='admin'?({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga1:x.harga_1,harga2:x.harga_2,harga3:x.harga_3,update:x.tanggal_update}):({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga3:x.harga_3,update:x.tanggal_update}));
  const escX=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
  const body=rows.map(x=>currentRole==='admin'?`<tr><td>${x.no}</td><td>${escX(x.nama)}</td><td>${escX(x.spesifikasi)}</td><td>${escX(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga1)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga2)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${escX(x.update)}</td></tr>`:`<tr><td>${x.no}</td><td>${escX(x.nama)}</td><td>${escX(x.spesifikasi)}</td><td>${escX(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${escX(x.update)}</td></tr>`).join('');
- const headers=currentRole==='admin'?'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 1</th><th>Harga 2</th><th>Harga 3</th><th>Update</th>':'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 3</th><th>Update</th>';
+ const headers=currentRole==='admin'?'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 1</th><th>Harga 2</th><th>Harga 3</th><th>Update</th>':'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga Cust</th><th>Update</th>';
  const xls=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:Arial}th{background:#d9e2f3;font-weight:bold;border:1px solid #888;padding:6px}td{border:1px solid #aaa;padding:5px}</style></head><body><h2>DAFTAR HARGA BAHAN BAKU - PT KATRACO SANTIKA</h2><div>Harga Update: ${escX(new Date().toLocaleDateString('id-ID'))}</div><br><table border="1"><tr>${headers}</tr>${body}</table></body></html>`;
  const blob=new Blob(['\ufeff',xls],{type:'application/vnd.ms-excel'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='Daftar_Harga_Katraco_'+today()+'.xls';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
