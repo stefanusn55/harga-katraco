@@ -52,6 +52,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
   <div class="actions" style="margin:0 0 14px">
     <button id="tabBahan" class="btn green" onclick="switchSection('bahan')">Bahan Baku</button>
     <button id="tabProduk" class="btn gray" onclick="switchSection('produk')">Produk Jadi</button>
+    <button id="tabDna" class="btn gray" onclick="switchSection('dna')">Bahan DNA</button>
     <button id="tabBiayaStandar" class="btn gray" onclick="switchSection('standar')">Persentase HPP</button>
     <button id="tabValidasi" class="btn gray" onclick="switchSection('validasi')">Validasi Produk</button>
   </div>
@@ -73,6 +74,16 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
     <div class="table-wrap">
       <table style="min-width:650px"><thead><tr><th>No</th><th>Nama Produk</th><th>Komposisi</th><th>HPP Bahan/kg</th><th>Harga Jual/kg</th><th>Aksi</th></tr></thead>
       <tbody id="productsBody"><tr><td colspan="6" class="empty">Memuat produk...</td></tr></tbody></table>
+    </div>
+  </section>
+  <section id="dnaSection" class="panel" style="display:none">
+    <div class="toolbar">
+      <input id="dnaSearch" class="search" placeholder="Cari bahan berakhiran DNA..." oninput="renderDna()">
+      <button class="btn gray" onclick="loadDnaMaterials()">↻ Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table style="min-width:700px"><thead><tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr></thead>
+      <tbody id="dnaBody"><tr><td colspan="6" class="empty">Klik menu Bahan DNA untuk memuat data.</td></tr></tbody></table>
     </div>
   </section>
   <section id="validasiSection" class="panel" style="display:none">
@@ -416,21 +427,51 @@ async function exportHppExcel(){
 let products = [];
 let editProductId = null;
 let activeSection = 'bahan';
+let dnaMaterials = [];
 
 function switchSection(section){
   if(currentRole!=='admin' && ['standar','validasi'].includes(section)) return;
   activeSection=section;
   document.getElementById('bahanSection').style.display=section==='bahan'?'block':'none';
   document.getElementById('produkSection').style.display=section==='produk'?'block':'none';
+  document.getElementById('dnaSection').style.display=section==='dna'?'block':'none';
   document.getElementById('standarSection').style.display=section==='standar'?'block':'none';
   document.getElementById('validasiSection').style.display=section==='validasi'?'block':'none';
   document.getElementById('tabBahan').className='btn '+(section==='bahan'?'green':'gray');
   document.getElementById('tabProduk').className='btn '+(section==='produk'?'green':'gray');
+  document.getElementById('tabDna').className='btn '+(section==='dna'?'green':'gray');
   document.getElementById('tabBiayaStandar').className='btn '+(section==='standar'?'green':'gray');
   document.getElementById('tabValidasi').className='btn '+(section==='validasi'?'green':'gray');
   if(section==='standar') loadHppConfig();
   if(section==='produk' || section==='validasi') loadProducts();
+  if(section==='dna') loadDnaMaterials();
 }
+async function loadDnaMaterials(){
+  const body=document.getElementById('dnaBody');
+  body.innerHTML='<tr><td colspan="6" class="empty">Memuat bahan DNA...</td></tr>';
+  const source=currentRole==='admin'?'harga_bahan':'harga_ts';
+  const {data:rows,error}=await db.from(source).select('id,nama_bahan,spesifikasi,kemasan,harga_3,tanggal_update').ilike('nama_bahan','%DNA').order('nama_bahan',{ascending:true});
+  if(error){
+    console.error('Gagal memuat bahan DNA:',error);
+    body.innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat bahan DNA: ${esc(error.message||error)}</td></tr>`;
+    return;
+  }
+  dnaMaterials=rows||[];
+  renderDna();
+}
+function renderDna(){
+  const q=(document.getElementById('dnaSearch')?.value||'').toLowerCase().trim();
+  const filtered=dnaMaterials.filter(x=>[x.nama_bahan,x.spesifikasi,x.kemasan].join(' ').toLowerCase().includes(q));
+  const body=document.getElementById('dnaBody');
+  body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price"><b>Rp ${money(x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Tidak ada bahan dengan nama berakhiran DNA.</td></tr>';
+  if(activeSection==='dna'){
+    document.getElementById('statCount').textContent=dnaMaterials.length;
+    document.getElementById('statShown').textContent=filtered.length;
+    const latest=dnaMaterials.map(x=>x.tanggal_update).filter(Boolean).sort().pop();
+    document.getElementById('statDate').textContent=fmtDate(latest);
+  }
+}
+
 async function loadProducts(){
   document.getElementById('productsBody').innerHTML='<tr><td colspan="6" class="empty">Memuat produk...</td></tr>';
   if(currentRole==='ts'){
