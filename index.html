@@ -50,7 +50,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
   <div class="actions">
     <button class="btn primary" onclick="refreshData()">↻ Refresh</button>
     <button id="addBtn" class="btn primary" onclick="openAdd()">＋ Tambah Item</button>
-    <button class="btn primary" onclick="exportExcel()">⬇ Excel</button>
+    <button id="mainExportBtn" class="btn primary" onclick="exportExcel()">⬇ Excel Bahan Baku</button>
     <button class="btn red" onclick="logout()">Keluar</button>
   </div>
 </div></header>
@@ -290,6 +290,7 @@ async function startApp(){
  document.getElementById('tsNotice').style.display=currentRole==='ts'?'block':'none';
  document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='block';
  setupHeader();
+  updateMainExportButton();
   const productHead=document.querySelector('#produkSection thead');
   if(currentRole==='ts'){productHead.innerHTML='<tr><th>No</th><th>Nama Produk Obat Jadi</th><th class="num">Harga Jual/kg</th></tr>';document.getElementById('exportHppBtn').style.display='none';document.getElementById('addProductBtn').style.display='none';}
   else {document.getElementById('exportHppBtn').style.display='inline-block';}
@@ -393,13 +394,67 @@ async function delItem(id,nama){
  await loadData();
 }
 
+function updateMainExportButton(){
+ const btn=document.getElementById('mainExportBtn');
+ if(!btn)return;
+ const labels={
+   bahan:'⬇ Excel Bahan Baku',
+   produk:'⬇ Excel Produk Jadi',
+   dna:'⬇ Excel DNA',
+   validasi:'⬇ Excel Validasi',
+   standar:'Excel tidak tersedia'
+ };
+ btn.textContent=labels[activeSection]||'⬇ Excel';
+ btn.disabled=activeSection==='standar';
+ btn.title=activeSection==='standar'?'Menu Persentase HPP tidak memiliki daftar untuk diekspor.':'Ekspor data pada menu yang sedang dibuka';
+}
+
 function exportExcel(){
+ if(activeSection==='produk'){exportProductsExcel();return;}
+ if(activeSection==='dna'){exportDnaExcel();return;}
+ if(activeSection==='validasi'){exportValidationExcel();return;}
+ if(activeSection==='standar'){alert('Menu Persentase HPP tidak memiliki daftar data untuk diekspor.');return;}
+ exportMaterialsExcel();
+}
+
+function htmlExcelEscape(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
+function downloadHtmlExcel(title, headers, rows, filename, numericColumns=[]){
+ const headerHtml=headers.map(h=>`<th>${htmlExcelEscape(h)}</th>`).join('');
+ const bodyHtml=rows.map(row=>`<tr>${row.map((cell,i)=>{
+   const numeric=numericColumns.includes(i);
+   const style=numeric?` style="mso-number-format:'#,##0.00';text-align:right"`:'';
+   return `<td${style}>${htmlExcelEscape(cell)}</td>`;
+ }).join('')}</tr>`).join('');
+ const xls=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:Arial}h2{color:#134e4a}th{background:#d9e2f3;font-weight:bold;border:1px solid #888;padding:6px}td{border:1px solid #aaa;padding:5px}table{border-collapse:collapse}</style></head><body><h2>${htmlExcelEscape(title)}</h2><div>Tanggal ekspor: ${htmlExcelEscape(new Date().toLocaleDateString('id-ID'))}</div><br><table><tr>${headerHtml}</tr>${bodyHtml}</table></body></html>`;
+ const blob=new Blob(['\ufeff',xls],{type:'application/vnd.ms-excel'});
+ const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);
+}
+
+function exportMaterialsExcel(){
  const rows=sortByNameAtoZ(data).map((x,i)=> currentRole==='admin'?({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga1:x.harga_1,harga2:x.harga_2,harga3:x.harga_3,update:x.tanggal_update}):({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga3:x.harga_3,update:x.tanggal_update}));
- const escX=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
- const body=rows.map(x=>currentRole==='admin'?`<tr><td>${x.no}</td><td>${escX(x.nama)}</td><td>${escX(x.spesifikasi)}</td><td>${escX(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga1)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga2)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${escX(x.update)}</td></tr>`:`<tr><td>${x.no}</td><td>${escX(x.nama)}</td><td>${escX(x.spesifikasi)}</td><td>${escX(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${escX(x.update)}</td></tr>`).join('');
+ const body=rows.map(x=>currentRole==='admin'?`<tr><td>${x.no}</td><td>${htmlExcelEscape(x.nama)}</td><td>${htmlExcelEscape(x.spesifikasi)}</td><td>${htmlExcelEscape(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga1)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga2)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${htmlExcelEscape(x.update)}</td></tr>`:`<tr><td>${x.no}</td><td>${htmlExcelEscape(x.nama)}</td><td>${htmlExcelEscape(x.spesifikasi)}</td><td>${htmlExcelEscape(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${htmlExcelEscape(x.update)}</td></tr>`).join('');
  const headers=currentRole==='admin'?'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 1</th><th>Harga 2</th><th>Harga 3</th><th>Update</th>':'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga Cust</th><th>Update</th>';
- const xls=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:Arial}th{background:#d9e2f3;font-weight:bold;border:1px solid #888;padding:6px}td{border:1px solid #aaa;padding:5px}</style></head><body><h2>DAFTAR HARGA BAHAN BAKU - PT KATRACO SANTIKA</h2><div>Harga Update: ${escX(new Date().toLocaleDateString('id-ID'))}</div><br><table border="1"><tr>${headers}</tr>${body}</table></body></html>`;
+ const xls=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:Arial}th{background:#d9e2f3;font-weight:bold;border:1px solid #888;padding:6px}td{border:1px solid #aaa;padding:5px}</style></head><body><h2>DAFTAR HARGA BAHAN BAKU - PT KATRACO SANTIKA</h2><div>Harga Update: ${htmlExcelEscape(new Date().toLocaleDateString('id-ID'))}</div><br><table border="1"><tr>${headers}</tr>${body}</table></body></html>`;
  const blob=new Blob(['\ufeff',xls],{type:'application/vnd.ms-excel'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='Daftar_Harga_Katraco_'+today()+'.xls';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function exportProductsExcel(){
+ if(!products.length){alert('Data Produk Jadi belum dimuat. Buka menu Produk Jadi, tunggu data selesai dimuat, lalu klik Excel lagi.');return;}
+ const sorted=sortByNameAtoZ(products,'nama_produk');
+ if(currentRole==='ts'){
+   const rows=sorted.map((p,i)=>[i+1,p.nama_produk||'',Number(p.harga_jual)||0]);
+   downloadHtmlExcel('DAFTAR PRODUK JADI DAN HARGA JUAL - PT KATRACO SANTIKA',['No','Nama Produk Jadi','Harga Jual/kg'],rows,'Daftar_Produk_Jadi_TS_'+today()+'.xls',[2]);
+   return;
+ }
+ const rows=sorted.map((p,i)=>[i+1,p.nama_produk||'',Number(p.jumlah_bahan)||0,Number(p.hpp_bahan)||0,Math.ceil((Number(p.hpp_akhir)||0)/100)*100]);
+ downloadHtmlExcel('DAFTAR PRODUK JADI - PT KATRACO SANTIKA',['No','Nama Produk','Jumlah Bahan','HPP Bahan/kg','Harga Jual/kg'],rows,'Daftar_Produk_Jadi_Katraco_'+today()+'.xls',[2,3,4]);
+}
+
+function exportDnaExcel(){
+ if(!dnaMaterials.length){alert('Data DNA belum dimuat. Buka menu DNA, tunggu data selesai dimuat, lalu klik Excel lagi.');return;}
+ const sorted=sortByNameAtoZ(dnaMaterials);
+ const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_3)||0,x.tanggal_update||'']);
+ downloadHtmlExcel('DAFTAR DNA — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Cust','Update'],rows,'Daftar_DNA_Katraco_'+today()+'.xls',[4]);
 }
 
 
@@ -450,11 +505,12 @@ function renderValidation(){
  }).join(''):'<tr><td colspan="9" class="empty">Tidak ada produk yang cocok.</td></tr>';
 }
 function exportValidationExcel(){
- if(typeof XLSX==='undefined'){alert('Library Excel belum tersedia.');return}
+ if(currentRole!=='admin'){alert('Validasi produk hanya dapat diekspor oleh Admin.');return}
  const infos=products.map(p=>({p,...validationInfo(p)}));
- const data=infos.map((x,i)=>({'No':i+1,'Nama Produk':x.p.nama_produk,'Jumlah Bahan':x.p.jumlah_bahan,'Total Pemakaian (kg)':Number(x.p.total_kg||0),'HPP Bahan/kg':Number(x.p.hpp_bahan||0),'Biaya Khusus/kg':Number(x.p.biaya_khusus||0),'Harga Jual/kg':x.price,'Status':x.status,'Catatan':x.notes.join('; ')}));
- const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Validasi Produk'); XLSX.writeFile(wb,'Validasi_Produk_Katraco.xlsx');
+ const rows=infos.map((x,i)=>[i+1,x.p.nama_produk||'',Number(x.p.jumlah_bahan||0),Number(x.p.total_kg||0),Number(x.p.hpp_bahan||0),Number(x.p.biaya_khusus||0),Number(x.price||0),x.status,x.notes.join('; ')]);
+ downloadHtmlExcel('VALIDASI PRODUK — PT KATRACO SANTIKA',['No','Nama Produk','Jumlah Bahan','Total Pemakaian (kg)','HPP Bahan/kg','Biaya Khusus/kg','Harga Jual/kg','Status','Catatan'],rows,'Validasi_Produk_Katraco_'+today()+'.xls',[2,3,4,5,6]);
 }
+
 async function exportHppExcel(){
  if(currentRole!=='admin'){alert('Laporan HPP hanya dapat diekspor oleh Admin.');return}
  const btn=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Excel Laporan HPP'));
@@ -512,6 +568,7 @@ function switchSection(section){
   document.getElementById('tabDna').className='btn '+(section==='dna'?'green':'gray');
   document.getElementById('tabBiayaStandar').className='btn '+(section==='standar'?'green':'gray');
   document.getElementById('tabValidasi').className='btn '+(section==='validasi'?'green':'gray');
+  updateMainExportButton();
   if(section==='standar') loadHppConfig();
   if(section==='produk' || section==='validasi') loadProducts();
   if(section==='dna') loadDnaMaterials();
