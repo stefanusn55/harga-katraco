@@ -455,8 +455,8 @@ function exportDnaExcel(){
  if(!dnaMaterials.length){alert('Data DNA belum dimuat. Buka menu DNA, tunggu data selesai dimuat, lalu klik Excel lagi.');return;}
  const sorted=sortByNameAtoZ(dnaMaterials);
  if(currentRole==='admin'){
-   const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_2)||0,Number(x.biaya_dna)||0,Number(x.hpp_dna)||0,Number(x.harga_3)||0,x.tanggal_update||'']);
-   downloadHtmlExcel('DAFTAR HPP DNA — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','HPP Dasar (Harga 2)','Biaya Tambahan/kg','HPP DNA/kg','Harga Cust','Update'],rows,'HPP_DNA_Katraco_'+today()+'.xls',[4,5,6,7]);
+   const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_3)||0,Number(x.biaya_dna)||0,Number(x.harga_jual_dna)||0,x.tanggal_update||'']);
+   downloadHtmlExcel('DAFTAR DNA DAN HARGA JUAL — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Cust','Biaya Tambahan/kg','Harga Jual DNA/kg','Update'],rows,'Daftar_DNA_Harga_Jual_Katraco_'+today()+'.xls',[4,5,6]);
    return;
  }
  const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_3)||0,x.tanggal_update||'']);
@@ -586,9 +586,7 @@ async function loadDnaMaterials(){
   const body=document.getElementById('dnaBody');
   body.innerHTML='<tr><td colspan="10" class="empty">Memuat data DNA...</td></tr>';
   const source=currentRole==='admin'?'harga_bahan':'harga_ts';
-  const columns=currentRole==='admin'
-    ? 'id,nama_bahan,spesifikasi,kemasan,harga_2,harga_3,tanggal_update'
-    : 'id,nama_bahan,spesifikasi,kemasan,harga_3,tanggal_update';
+  const columns='id,nama_bahan,spesifikasi,kemasan,harga_3,tanggal_update';
   const {data:rows,error}=await db.from(source).select(columns).or('nama_bahan.ilike.%DNA%,spesifikasi.ilike.%DNA%').order('nama_bahan',{ascending:true});
   if(error){
     console.error('Gagal memuat data DNA:',error);
@@ -605,34 +603,26 @@ async function loadDnaMaterials(){
   dnaCostTableError='';
   const adminNotice=document.getElementById('dnaAdminNotice');
   if(currentRole==='admin'){
-    const [{data:costs,error:costError},{data:config,error:configError}]=await Promise.all([
-      db.from('biaya_tambahan_dna').select('id,bahan_id,nama_biaya,biaya_per_kg').order('id',{ascending:true}),
-      db.from('konfigurasi_hpp').select('biaya_produksi_pct,margin_pct,operasional_pct').eq('id',1).maybeSingle()
-    ]);
+    const {data:costs,error:costError}=await db.from('biaya_tambahan_dna').select('id,bahan_id,nama_biaya,biaya_per_kg').order('id',{ascending:true});
     if(costError){dnaCostTableError=costError.message||String(costError);console.error('Tabel biaya DNA belum siap:',costError);}
     else dnaCostRows=costs||[];
-    if(!configError&&config)hppConfig={...hppConfig,...config};
     if(adminNotice){
       adminNotice.style.display='block';
       adminNotice.textContent=dnaCostTableError
         ? 'Fitur Biaya DNA belum tersedia di database. Jalankan SQL setup_biaya_tambahan_dna.sql terlebih dahulu. Pesan: '+dnaCostTableError
-        : 'HPP DNA dihitung dari Harga 2 sebagai dasar, memakai persentase HPP standar, lalu ditambah biaya khusus per kg. Harga Cust tetap diambil dari Harga 3 database.';
+        : 'Harga Jual DNA dihitung langsung dari Harga Cust (Harga 3 database) ditambah total biaya tambahan per kg. Persentase HPP standar tidak diterapkan pada menu DNA.';
     }
     applyDnaCostsToMaterials();
   }else if(adminNotice){adminNotice.style.display='none';}
   renderDna();
 }
 function applyDnaCostsToMaterials(){
-  const bp=Number(hppConfig?.biaya_produksi_pct??8), mg=Number(hppConfig?.margin_pct??5), op=Number(hppConfig?.operasional_pct??4);
+  // Untuk menu DNA, harga jual = Harga Cust (harga_3) + total biaya tambahan per kg.
+  // Tidak memakai Harga 2 atau persentase HPP standar.
   dnaMaterials=dnaMaterials.map(x=>{
-    const biaya= dnaCostRows.filter(c=>Number(c.bahan_id)===Number(x.id)).reduce((sum,c)=>sum+(Number(c.biaya_per_kg)||0),0);
-    const base=Number(x.harga_2)||0;
-    const produksi=base*bp/100;
-    const subtotal1=base+produksi;
-    const margin=subtotal1*mg/100;
-    const subtotal2=subtotal1+margin;
-    const operasional=subtotal2*op/100;
-    return {...x,biaya_dna:biaya,hpp_dna:subtotal2+operasional+biaya};
+    const biaya=dnaCostRows.filter(c=>Number(c.bahan_id)===Number(x.id)).reduce((sum,c)=>sum+(Number(c.biaya_per_kg)||0),0);
+    const hargaCust=Number(x.harga_3)||0;
+    return {...x,biaya_dna:biaya,harga_jual_dna:hargaCust+biaya};
   });
 }
 function renderDna(){
@@ -643,11 +633,11 @@ function renderDna(){
   const head=document.querySelector('#dnaSection thead');
   if(head){
     head.innerHTML=admin
-      ? '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">HPP Dasar (Harga 2)</th><th class="num">Biaya Tambahan/kg</th><th class="num">HPP DNA/kg</th><th class="num">Harga Cust</th><th>Update</th><th>Aksi</th></tr>'
+      ? '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th class="num">Biaya Tambahan/kg</th><th class="num">Harga Jual/kg</th><th>Update</th><th>Aksi</th></tr>'
       : '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr>';
   }
   if(admin){
-    body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_2||0)}</td><td class="num price">Rp ${money(x.biaya_dna||0)}</td><td class="num price"><b>Rp ${money(x.hpp_dna||0)}</b></td><td class="num price">Rp ${money(x.harga_3||0)}</td><td>${fmtDate(x.tanggal_update)}</td><td><button class="icon" onclick="openDnaCosts(${Number(x.id)})">Biaya</button></td></tr>`).join(''):'<tr><td colspan="10" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
+    body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_3||0)}</td><td class="num price">Rp ${money(x.biaya_dna||0)}</td><td class="num price"><b>Rp ${money(x.harga_jual_dna||0)}</b></td><td>${fmtDate(x.tanggal_update)}</td><td><button class="icon" onclick="openDnaCosts(${Number(x.id)})">Biaya</button></td></tr>`).join(''):'<tr><td colspan="9" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
   }else{
     body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price"><b>Rp ${money(x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
   }
@@ -799,7 +789,7 @@ async function openDnaCosts(bahanId){
  const bahan=dnaMaterials.find(x=>Number(x.id)===Number(bahanId));if(!bahan)return;
  activeCostMode='dna';activeCostProductId=null;activeCostDnaId=Number(bahanId);costRows=[];
  document.getElementById('costTitle').textContent='Biaya HPP DNA: '+bahan.nama_bahan;
- document.getElementById('costNotice').textContent='Tambahkan biaya per kg khusus untuk bahan DNA ini. HPP DNA dihitung dari Harga 2, kemudian Biaya Produksi, Margin, Operasional sesuai persentase standar, lalu biaya tambahan ditambahkan tanpa dikenai persentase lagi.';
+ document.getElementById('costNotice').textContent='Tambahkan biaya per kg khusus untuk bahan DNA ini. Harga Jual DNA dihitung langsung dari Harga Cust (Harga 3) ditambah total biaya tambahan per kg. Persentase HPP standar tidak diterapkan.';
  document.getElementById('costName').placeholder='Contoh: Packing, handling, ongkos tambahan';
  document.getElementById('costAmount').placeholder='Contoh: 500';
  document.getElementById('costName').value='';document.getElementById('costAmount').value='';
