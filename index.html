@@ -459,8 +459,8 @@ function exportDnaExcel(){
    downloadHtmlExcel('DAFTAR DNA DAN HARGA JUAL — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Cust','Biaya Tambahan/kg','Harga Jual DNA/kg','Update'],rows,'Daftar_DNA_Harga_Jual_Katraco_'+today()+'.xls',[4,5,6]);
    return;
  }
- const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_3)||0,x.tanggal_update||'']);
- downloadHtmlExcel('DAFTAR DNA — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Cust','Update'],rows,'Daftar_DNA_Katraco_'+today()+'.xls',[4]);
+ const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_3)||0,Number(x.harga_jual_dna)||0,x.tanggal_update||'']);
+ downloadHtmlExcel('DAFTAR DNA DAN HARGA JUAL — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Cust','Harga Jual/kg','Update'],rows,'Daftar_DNA_TS_Harga_Jual_'+today()+'.xls',[4,5]);
 }
 
 
@@ -585,35 +585,51 @@ async function loadDnaMaterials(){
   if(!['admin','ts'].includes(currentRole))return;
   const body=document.getElementById('dnaBody');
   body.innerHTML='<tr><td colspan="10" class="empty">Memuat data DNA...</td></tr>';
-  const source=currentRole==='admin'?'harga_bahan':'harga_ts';
-  const columns='id,nama_bahan,spesifikasi,kemasan,harga_3,tanggal_update';
-  const {data:rows,error}=await db.from(source).select(columns).or('nama_bahan.ilike.%DNA%,spesifikasi.ilike.%DNA%').order('nama_bahan',{ascending:true});
+  const adminNotice=document.getElementById('dnaAdminNotice');
+  dnaCostRows=[];
+  dnaCostTableError='';
+
+  // TS membaca harga jual DNA yang dihitung di database melalui fungsi aman.
+  // Dengan demikian TS tidak perlu diberi akses langsung ke tabel biaya DNA.
+  if(currentRole==='ts'){
+    const {data:rows,error}=await db.rpc('daftar_harga_dna_ts');
+    if(error){
+      console.error('Gagal memuat harga jual DNA untuk TS:',error);
+      body.innerHTML=`<tr><td colspan="7" class="empty">Harga Jual DNA belum tersedia. Admin perlu menjalankan SQL setup_harga_jual_dna_ts.sql. Pesan: ${esc(error.message||error)}</td></tr>`;
+      return;
+    }
+    dnaMaterials=(rows||[]).map(x=>({
+      id:Number(x.id), nama_bahan:x.nama_bahan, spesifikasi:x.spesifikasi, kemasan:x.kemasan,
+      harga_3:Number(x.harga_cust)||0, biaya_dna:null,
+      harga_jual_dna:Number(x.harga_jual_dna)||0, tanggal_update:x.tanggal_update
+    }));
+    if(adminNotice)adminNotice.style.display='none';
+    renderDna();
+    return;
+  }
+
+  // Admin memakai data bahan baku dan tabel biaya terpisah agar bisa mengelola rincian biaya.
+  const {data:rows,error}=await db.from('harga_bahan').select('id,nama_bahan,spesifikasi,kemasan,harga_3,tanggal_update').or('nama_bahan.ilike.%DNA%,spesifikasi.ilike.%DNA%').order('nama_bahan',{ascending:true});
   if(error){
     console.error('Gagal memuat data DNA:',error);
     body.innerHTML=`<tr><td colspan="10" class="empty">Gagal memuat data DNA: ${esc(error.message||error)}</td></tr>`;
     return;
   }
-  // Bahan yang sudah disepakati untuk tidak ditampilkan pada menu DNA.
   const excludedDnaTerms=['amprolium','levamisol','streptomycin sulphate-dna','trimethoprim'];
   dnaMaterials=(rows||[]).filter(x=>{
     const text=[x.nama_bahan,x.spesifikasi].join(' ').toLowerCase();
     return !excludedDnaTerms.some(term=>text.includes(term));
   });
-  dnaCostRows=[];
-  dnaCostTableError='';
-  const adminNotice=document.getElementById('dnaAdminNotice');
-  if(currentRole==='admin'){
-    const {data:costs,error:costError}=await db.from('biaya_tambahan_dna').select('id,bahan_id,nama_biaya,biaya_per_kg').order('id',{ascending:true});
-    if(costError){dnaCostTableError=costError.message||String(costError);console.error('Tabel biaya DNA belum siap:',costError);}
-    else dnaCostRows=costs||[];
-    if(adminNotice){
-      adminNotice.style.display='block';
-      adminNotice.textContent=dnaCostTableError
-        ? 'Fitur Biaya DNA belum tersedia di database. Jalankan SQL setup_biaya_tambahan_dna.sql terlebih dahulu. Pesan: '+dnaCostTableError
-        : 'Harga Jual DNA dihitung langsung dari Harga Cust (Harga 3 database) ditambah total biaya tambahan per kg. Persentase HPP standar tidak diterapkan pada menu DNA.';
-    }
-    applyDnaCostsToMaterials();
-  }else if(adminNotice){adminNotice.style.display='none';}
+  const {data:costs,error:costError}=await db.from('biaya_tambahan_dna').select('id,bahan_id,nama_biaya,biaya_per_kg').order('id',{ascending:true});
+  if(costError){dnaCostTableError=costError.message||String(costError);console.error('Tabel biaya DNA belum siap:',costError);}
+  else dnaCostRows=costs||[];
+  if(adminNotice){
+    adminNotice.style.display='block';
+    adminNotice.textContent=dnaCostTableError
+      ? 'Fitur Biaya DNA belum tersedia di database. Jalankan SQL setup_biaya_tambahan_dna.sql terlebih dahulu. Pesan: '+dnaCostTableError
+      : 'Harga Jual DNA = Harga Cust (Harga 3 database) + total biaya tambahan per kg. TS akan menerima Harga Jual yang sama melalui database. Persentase HPP standar tidak diterapkan pada DNA.';
+  }
+  applyDnaCostsToMaterials();
   renderDna();
 }
 function applyDnaCostsToMaterials(){
@@ -634,12 +650,12 @@ function renderDna(){
   if(head){
     head.innerHTML=admin
       ? '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th class="num">Biaya Tambahan/kg</th><th class="num">Harga Jual/kg</th><th>Update</th><th>Aksi</th></tr>'
-      : '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr>';
+      : '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th class="num">Harga Jual/kg</th><th>Update</th></tr>';
   }
   if(admin){
     body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_3||0)}</td><td class="num price">Rp ${money(x.biaya_dna||0)}</td><td class="num price"><b>Rp ${money(x.harga_jual_dna||0)}</b></td><td>${fmtDate(x.tanggal_update)}</td><td><button class="icon" onclick="openDnaCosts(${Number(x.id)})">Biaya</button></td></tr>`).join(''):'<tr><td colspan="9" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
   }else{
-    body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price"><b>Rp ${money(x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
+    body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_3||0)}</td><td class="num price"><b>Rp ${money(x.harga_jual_dna||0)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Tidak ada bahan DNA yang tersedia.</td></tr>';
   }
   if(activeSection==='dna'){
     document.getElementById('statCount').textContent=dnaMaterials.length;
