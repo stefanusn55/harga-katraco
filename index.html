@@ -93,8 +93,9 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
       <input id="dnaSearch" class="search" placeholder="Cari bahan dengan DNA pada nama atau spesifikasi..." oninput="renderDna()">
       <button class="btn gray" onclick="loadDnaMaterials()">↻ Refresh</button>
     </div>
+    <div id="dnaAdminNotice" class="notice" style="display:none;margin:14px"></div>
     <div class="table-wrap">
-      <table style="min-width:700px"><thead><tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr></thead>
+      <table style="min-width:1120px"><thead><tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr></thead>
       <tbody id="dnaBody"><tr><td colspan="6" class="empty">Klik menu DNA untuk memuat data.</td></tr></tbody></table>
     </div>
   </section>
@@ -137,7 +138,7 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
 <div id="costModal" class="modal" onclick="if(event.target===this)closeCosts()">
  <div class="box" style="max-width:900px">
   <h2 id="costTitle">Biaya Tambahan Produk</h2>
-  <div class="notice">Biaya khusus ini hanya untuk kebutuhan produk tertentu di luar persentase standar. Nilai ditambahkan setelah perhitungan Biaya Produksi, Margin, dan Operasional; biaya khusus tidak dikenai persentase lagi. Masukkan dalam rupiah per 1 kg produk jadi.</div>
+  <div id="costNotice" class="notice">Biaya khusus ini hanya untuk kebutuhan produk tertentu di luar persentase standar. Nilai ditambahkan setelah perhitungan Biaya Produksi, Margin, dan Operasional; biaya khusus tidak dikenai persentase lagi. Masukkan dalam rupiah per 1 kg produk jadi.</div>
   <div class="formgrid">
    <div class="field"><label>Nama biaya</label><input id="costName" maxlength="120" placeholder="Contoh: Kemasan, tenaga kerja, listrik"></div>
    <div class="field"><label>Biaya (Rp per kg produk)</label><input id="costAmount" type="number" min="0" step="1" placeholder="Contoh: 500"></div>
@@ -283,7 +284,7 @@ async function startApp(){
  document.getElementById('userStatus').innerHTML=`Login: <b>${esc(currentName)}</b> <span class="role">${currentRole.toUpperCase()}</span>`;
  document.getElementById('addBtn').style.display=currentRole==='admin'?'inline-block':'none';
   document.getElementById('tabProduk').style.display='inline-block';
-  document.getElementById('tabDna').style.display=currentRole==='ts'?'inline-block':'none';
+  document.getElementById('tabDna').style.display=(currentRole==='admin'||currentRole==='ts')?'inline-block':'none';
   document.getElementById('tabBiayaStandar').style.display=currentRole==='admin'?'inline-block':'none';
   document.getElementById('tabValidasi').style.display=currentRole==='admin'?'inline-block':'none';
   document.getElementById('addProductBtn').style.display=currentRole==='admin'?'inline-block':'none';
@@ -453,6 +454,11 @@ function exportProductsExcel(){
 function exportDnaExcel(){
  if(!dnaMaterials.length){alert('Data DNA belum dimuat. Buka menu DNA, tunggu data selesai dimuat, lalu klik Excel lagi.');return;}
  const sorted=sortByNameAtoZ(dnaMaterials);
+ if(currentRole==='admin'){
+   const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_2)||0,Number(x.biaya_dna)||0,Number(x.hpp_dna)||0,Number(x.harga_3)||0,x.tanggal_update||'']);
+   downloadHtmlExcel('DAFTAR HPP DNA — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','HPP Dasar (Harga 2)','Biaya Tambahan/kg','HPP DNA/kg','Harga Cust','Update'],rows,'HPP_DNA_Katraco_'+today()+'.xls',[4,5,6,7]);
+   return;
+ }
  const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_3)||0,x.tanggal_update||'']);
  downloadHtmlExcel('DAFTAR DNA — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Cust','Update'],rows,'Daftar_DNA_Katraco_'+today()+'.xls',[4]);
 }
@@ -553,10 +559,12 @@ let products = [];
 let editProductId = null;
 let activeSection = 'bahan';
 let dnaMaterials = [];
+let dnaCostRows = [];
+let dnaCostTableError = '';
 
 function switchSection(section){
   if(currentRole!=='admin' && ['standar','validasi'].includes(section)) return;
-  if(currentRole!=='ts' && section==='dna') return;
+  if(section==='dna' && !['admin','ts'].includes(currentRole)) return;
   activeSection=section;
   document.getElementById('bahanSection').style.display=section==='bahan'?'block':'none';
   document.getElementById('produkSection').style.display=section==='produk'?'block':'none';
@@ -574,28 +582,75 @@ function switchSection(section){
   if(section==='dna') loadDnaMaterials();
 }
 async function loadDnaMaterials(){
+  if(!['admin','ts'].includes(currentRole))return;
   const body=document.getElementById('dnaBody');
-  body.innerHTML='<tr><td colspan="6" class="empty">Memuat data DNA...</td></tr>';
+  body.innerHTML='<tr><td colspan="10" class="empty">Memuat data DNA...</td></tr>';
   const source=currentRole==='admin'?'harga_bahan':'harga_ts';
-  const {data:rows,error}=await db.from(source).select('id,nama_bahan,spesifikasi,kemasan,harga_3,tanggal_update').or('nama_bahan.ilike.%DNA%,spesifikasi.ilike.%DNA%').order('nama_bahan',{ascending:true});
+  const columns=currentRole==='admin'
+    ? 'id,nama_bahan,spesifikasi,kemasan,harga_2,harga_3,tanggal_update'
+    : 'id,nama_bahan,spesifikasi,kemasan,harga_3,tanggal_update';
+  const {data:rows,error}=await db.from(source).select(columns).or('nama_bahan.ilike.%DNA%,spesifikasi.ilike.%DNA%').order('nama_bahan',{ascending:true});
   if(error){
     console.error('Gagal memuat data DNA:',error);
-    body.innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat data DNA: ${esc(error.message||error)}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="10" class="empty">Gagal memuat data DNA: ${esc(error.message||error)}</td></tr>`;
     return;
   }
-  // Exclude bahan yang tidak ingin ditampilkan pada menu DNA untuk TS.
+  // Bahan yang sudah disepakati untuk tidak ditampilkan pada menu DNA.
   const excludedDnaTerms=['amprolium','levamisol','streptomycin sulphate-dna','trimethoprim'];
   dnaMaterials=(rows||[]).filter(x=>{
     const text=[x.nama_bahan,x.spesifikasi].join(' ').toLowerCase();
     return !excludedDnaTerms.some(term=>text.includes(term));
   });
+  dnaCostRows=[];
+  dnaCostTableError='';
+  const adminNotice=document.getElementById('dnaAdminNotice');
+  if(currentRole==='admin'){
+    const [{data:costs,error:costError},{data:config,error:configError}]=await Promise.all([
+      db.from('biaya_tambahan_dna').select('id,bahan_id,nama_biaya,biaya_per_kg').order('id',{ascending:true}),
+      db.from('konfigurasi_hpp').select('biaya_produksi_pct,margin_pct,operasional_pct').eq('id',1).maybeSingle()
+    ]);
+    if(costError){dnaCostTableError=costError.message||String(costError);console.error('Tabel biaya DNA belum siap:',costError);}
+    else dnaCostRows=costs||[];
+    if(!configError&&config)hppConfig={...hppConfig,...config};
+    if(adminNotice){
+      adminNotice.style.display='block';
+      adminNotice.textContent=dnaCostTableError
+        ? 'Fitur Biaya DNA belum tersedia di database. Jalankan SQL setup_biaya_tambahan_dna.sql terlebih dahulu. Pesan: '+dnaCostTableError
+        : 'HPP DNA dihitung dari Harga 2 sebagai dasar, memakai persentase HPP standar, lalu ditambah biaya khusus per kg. Harga Cust tetap diambil dari Harga 3 database.';
+    }
+    applyDnaCostsToMaterials();
+  }else if(adminNotice){adminNotice.style.display='none';}
   renderDna();
+}
+function applyDnaCostsToMaterials(){
+  const bp=Number(hppConfig?.biaya_produksi_pct??8), mg=Number(hppConfig?.margin_pct??5), op=Number(hppConfig?.operasional_pct??4);
+  dnaMaterials=dnaMaterials.map(x=>{
+    const biaya= dnaCostRows.filter(c=>Number(c.bahan_id)===Number(x.id)).reduce((sum,c)=>sum+(Number(c.biaya_per_kg)||0),0);
+    const base=Number(x.harga_2)||0;
+    const produksi=base*bp/100;
+    const subtotal1=base+produksi;
+    const margin=subtotal1*mg/100;
+    const subtotal2=subtotal1+margin;
+    const operasional=subtotal2*op/100;
+    return {...x,biaya_dna:biaya,hpp_dna:subtotal2+operasional+biaya};
+  });
 }
 function renderDna(){
   const q=(document.getElementById('dnaSearch')?.value||'').toLowerCase().trim();
   const filtered=dnaMaterials.filter(x=>[x.nama_bahan,x.spesifikasi,x.kemasan].join(' ').toLowerCase().includes(q));
   const body=document.getElementById('dnaBody');
-  body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price"><b>Rp ${money(x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
+  const admin=currentRole==='admin';
+  const head=document.querySelector('#dnaSection thead');
+  if(head){
+    head.innerHTML=admin
+      ? '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">HPP Dasar (Harga 2)</th><th class="num">Biaya Tambahan/kg</th><th class="num">HPP DNA/kg</th><th class="num">Harga Cust</th><th>Update</th><th>Aksi</th></tr>'
+      : '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr>';
+  }
+  if(admin){
+    body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_2||0)}</td><td class="num price">Rp ${money(x.biaya_dna||0)}</td><td class="num price"><b>Rp ${money(x.hpp_dna||0)}</b></td><td class="num price">Rp ${money(x.harga_3||0)}</td><td>${fmtDate(x.tanggal_update)}</td><td><button class="icon" onclick="openDnaCosts(${Number(x.id)})">Biaya</button></td></tr>`).join(''):'<tr><td colspan="10" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
+  }else{
+    body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price"><b>Rp ${money(x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
+  }
   if(activeSection==='dna'){
     document.getElementById('statCount').textContent=dnaMaterials.length;
     document.getElementById('statShown').textContent=filtered.length;
@@ -726,23 +781,52 @@ async function saveHppConfig(){
 }
 
 let activeCostProductId=null, costRows=[];
+let activeCostMode='product';
+let activeCostDnaId=null;
 async function openCosts(productId){
  if(currentRole!=='admin')return;
  const prod=products.find(p=>Number(p.id)===Number(productId));if(!prod)return;
- activeCostProductId=productId;
+ activeCostMode='product';activeCostDnaId=null;activeCostProductId=productId;
  document.getElementById('costTitle').textContent='Biaya Tambahan: '+prod.nama_produk;
+ document.getElementById('costNotice').textContent='Biaya khusus ini ditambahkan setelah perhitungan Biaya Produksi, Margin, dan Operasional; biaya khusus tidak dikenai persentase lagi. Masukkan dalam rupiah per 1 kg produk jadi.';
+ document.getElementById('costName').placeholder='Contoh: Kemasan, tenaga kerja, listrik';
+ document.getElementById('costAmount').placeholder='Contoh: 500';
  document.getElementById('costModal').classList.add('show');
  await loadCosts();
 }
-function closeCosts(){document.getElementById('costModal').classList.remove('show');activeCostProductId=null}
+async function openDnaCosts(bahanId){
+ if(currentRole!=='admin')return;
+ const bahan=dnaMaterials.find(x=>Number(x.id)===Number(bahanId));if(!bahan)return;
+ activeCostMode='dna';activeCostProductId=null;activeCostDnaId=Number(bahanId);costRows=[];
+ document.getElementById('costTitle').textContent='Biaya HPP DNA: '+bahan.nama_bahan;
+ document.getElementById('costNotice').textContent='Tambahkan biaya per kg khusus untuk bahan DNA ini. HPP DNA dihitung dari Harga 2, kemudian Biaya Produksi, Margin, Operasional sesuai persentase standar, lalu biaya tambahan ditambahkan tanpa dikenai persentase lagi.';
+ document.getElementById('costName').placeholder='Contoh: Packing, handling, ongkos tambahan';
+ document.getElementById('costAmount').placeholder='Contoh: 500';
+ document.getElementById('costName').value='';document.getElementById('costAmount').value='';
+ document.getElementById('costModal').classList.add('show');
+ await loadCosts();
+}
+function closeCosts(){document.getElementById('costModal').classList.remove('show');activeCostProductId=null;activeCostDnaId=null;activeCostMode='product'}
 async function loadCosts(){
- if(currentRole!=='admin'||!activeCostProductId)return;
+ if(currentRole!=='admin')return;
+ if(activeCostMode==='dna'){await loadDnaCosts();return;}
+ if(!activeCostProductId)return;
  const {data:rows,error}=await db.from('biaya_tambahan_produk').select('id,produk_id,nama_biaya,biaya_per_kg').eq('produk_id',activeCostProductId).order('nama_biaya',{ascending:true});
  if(error){document.getElementById('costBody').innerHTML=`<tr><td colspan="4" class="empty">Gagal memuat biaya: ${esc(error.message)}. Pastikan SQL Biaya Tambahan sudah dijalankan.</td></tr>`;return}
  costRows=rows||[];
  renderCosts();
 }
+async function loadDnaCosts(){
+ if(currentRole!=='admin'||!activeCostDnaId)return;
+ const {data:rows,error}=await db.from('biaya_tambahan_dna').select('id,bahan_id,nama_biaya,biaya_per_kg').eq('bahan_id',activeCostDnaId).order('nama_biaya',{ascending:true});
+ if(error){document.getElementById('costBody').innerHTML=`<tr><td colspan="4" class="empty">Gagal memuat biaya DNA: ${esc(error.message)}. Jalankan SQL setup_biaya_tambahan_dna.sql terlebih dahulu.</td></tr>`;document.getElementById('costTotal').textContent='Rp 0';return}
+ costRows=rows||[];
+ dnaCostRows=dnaCostRows.filter(c=>Number(c.bahan_id)!==Number(activeCostDnaId)).concat(costRows);
+ applyDnaCostsToMaterials();
+ renderCosts();
+}
 function renderCosts(){
+ if(activeCostMode==='dna'){renderDnaCosts();return;}
  const body=document.getElementById('costBody');
  body.innerHTML=costRows.length?costRows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama_biaya)}</td><td class="num price">Rp ${money(r.biaya_per_kg)}</td><td><button class="icon del" onclick="deleteCostItem(${r.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">Belum ada biaya tambahan.</td></tr>';
  const total=costRows.reduce((sum,r)=>sum+(Number(r.biaya_per_kg)||0),0);
@@ -750,8 +834,18 @@ function renderCosts(){
  const p=products.find(x=>Number(x.id)===Number(activeCostProductId));if(p)p.biaya_tambahan=total;
  renderProducts();
 }
+function renderDnaCosts(){
+ const body=document.getElementById('costBody');
+ body.innerHTML=costRows.length?costRows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama_biaya)}</td><td class="num price">Rp ${money(r.biaya_per_kg)}</td><td><button class="icon del" onclick="deleteCostItem(${r.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">Belum ada biaya tambahan untuk bahan DNA ini.</td></tr>';
+ const total=costRows.reduce((sum,r)=>sum+(Number(r.biaya_per_kg)||0),0);
+ document.getElementById('costTotal').textContent='Rp '+money(total);
+ applyDnaCostsToMaterials();
+ renderDna();
+}
 async function addCostItem(){
- if(currentRole!=='admin'||!activeCostProductId)return;
+ if(currentRole!=='admin')return;
+ if(activeCostMode==='dna'){await addDnaCostItem();return;}
+ if(!activeCostProductId)return;
  const nama_biaya=document.getElementById('costName').value.trim();
  const biaya_per_kg=Number(document.getElementById('costAmount').value);
  if(!nama_biaya){alert('Nama biaya wajib diisi.');return}
@@ -762,8 +856,27 @@ async function addCostItem(){
  document.getElementById('costName').value='';document.getElementById('costAmount').value='';
  await loadCosts();
 }
+async function addDnaCostItem(){
+ if(currentRole!=='admin'||!activeCostDnaId)return;
+ if(dnaCostTableError){alert('Tabel biaya DNA belum siap. Jalankan SQL setup_biaya_tambahan_dna.sql terlebih dahulu.');return}
+ const nama_biaya=document.getElementById('costName').value.trim();
+ const biaya_per_kg=Number(document.getElementById('costAmount').value);
+ if(!nama_biaya){alert('Nama biaya wajib diisi.');return}
+ if(!Number.isFinite(biaya_per_kg)||biaya_per_kg<0){alert('Biaya harus berupa angka nol atau lebih.');return}
+ if(costRows.some(r=>r.nama_biaya.toLowerCase()===nama_biaya.toLowerCase())){alert('Nama biaya tersebut sudah ada untuk bahan DNA ini.');return}
+ const {error}=await db.from('biaya_tambahan_dna').insert({bahan_id:activeCostDnaId,nama_biaya,biaya_per_kg});
+ if(error){alert('Gagal menyimpan biaya DNA: '+error.message);return}
+ document.getElementById('costName').value='';document.getElementById('costAmount').value='';
+ await loadCosts();
+}
 async function deleteCostItem(id){
  if(currentRole!=='admin')return;
+ if(activeCostMode==='dna'){
+   if(!confirm('Hapus biaya DNA ini?'))return;
+   const {error}=await db.from('biaya_tambahan_dna').delete().eq('id',id);
+   if(error){alert('Gagal menghapus biaya DNA: '+error.message);return}
+   await loadCosts();return;
+ }
  if(!confirm('Hapus biaya tambahan ini?'))return;
  const {error}=await db.from('biaya_tambahan_produk').delete().eq('id',id);
  if(error){alert('Gagal menghapus biaya: '+error.message);return}
