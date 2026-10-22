@@ -345,7 +345,13 @@ async function loadData(){
  render();
 }
 function showDataError(error){console.error(error);document.getElementById('tbody').innerHTML=`<tr><td colspan="9" class="empty">Gagal memuat data: ${esc(error.message||error)}</td></tr>`}
-async function refreshData(){await loadData()}
+async function refreshData(){
+ if(activeSection==='produk'){await loadProducts();return;}
+ if(activeSection==='dna'){await loadDnaMaterials();return;}
+ if(activeSection==='validasi'){await refreshValidation();return;}
+ if(activeSection==='standar'){await loadHppConfig();return;}
+ await loadData();
+}
 
 function sortByNameAtoZ(items, nameField='nama_bahan'){
  return [...items].sort((a,b)=>String(a[nameField]||'').localeCompare(String(b[nameField]||''),'id',{sensitivity:'base',numeric:true}));
@@ -355,10 +361,13 @@ function render(){
  const q=document.getElementById('search').value.toLowerCase().trim();
  const sortedData=sortByNameAtoZ(data);
  const filtered=sortedData.filter(x=>[x.nama_bahan,x.spesifikasi,x.kemasan].join(' ').toLowerCase().includes(q));
- document.getElementById('statCount').textContent=data.length;
- document.getElementById('statShown').textContent=filtered.length;
  const latest=data.map(x=>x.tanggal_update).filter(Boolean).sort().pop();
- document.getElementById('statDate').textContent=fmtDate(latest);
+ // Kartu ringkasan mengikuti Bahan Baku saja saat menu ini aktif.
+ if(activeSection==='bahan'){
+   document.getElementById('statCount').textContent=data.length;
+   document.getElementById('statShown').textContent=filtered.length;
+   document.getElementById('statDate').textContent=fmtDate(latest);
+ }
  document.getElementById('date').value=latest||'';
  if(currentRole==='admin'){
    document.getElementById('tbody').innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_1)}</td><td class="num price">Rp ${money(x.harga_2)}</td><td class="num price"><b>Rp ${money(x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td><td class="row-actions"><button class="icon" onclick="openEdit(${x.id})">Edit</button> <button class="icon del" onclick="delItem(${x.id},'${esc(x.nama_bahan).replace(/'/g,'\\\'')}')">Hapus</button></td></tr>`).join(''):`<tr><td colspan="9" class="empty">Data tidak ditemukan.</td></tr>`;
@@ -505,6 +514,12 @@ function renderValidation(){
  document.getElementById('valReady').textContent=String(ready);
  document.getElementById('valConfirm').textContent=String(confirm);
  const filtered=infos.filter(x=>(String(x.p.nama_produk||'')+' '+x.status+' '+x.notes.join(' ')).toLowerCase().includes(q));
+ if(activeSection==='validasi'){
+   document.getElementById('statCount').textContent=products.length;
+   document.getElementById('statShown').textContent=filtered.length;
+   const latest=products.map(p=>p.tanggal_update||p.updated_at).filter(Boolean).map(v=>String(v).slice(0,10)).sort().pop();
+   document.getElementById('statDate').textContent=fmtDate(latest);
+ }
  body.innerHTML=filtered.length?filtered.map((x,i)=>{
    const style=x.status==='Sesuai target'?'background:#dcfce7;color:#166534':x.status==='Perlu konfirmasi'?'background:#fef3c7;color:#92400e':'background:#fee2e2;color:#991b1b';
    return `<tr><td>${i+1}</td><td><strong>${esc(x.p.nama_produk)}</strong></td><td>${Number(x.p.jumlah_bahan||0)}</td><td>${Number(x.p.total_kg||0).toLocaleString('id-ID',{maximumFractionDigits:4})}</td><td class="price">Rp ${money(x.p.hpp_bahan||0)}</td><td class="price">Rp ${money(x.p.biaya_khusus||0)}</td><td class="price">Rp ${money(x.price)}</td><td><span class="tag" style="${style}">${esc(x.status)}</span></td><td>${esc(x.notes.join('; '))}</td></tr>`;
@@ -577,9 +592,18 @@ function switchSection(section){
   document.getElementById('tabBiayaStandar').className='btn '+(section==='standar'?'green':'gray');
   document.getElementById('tabValidasi').className='btn '+(section==='validasi'?'green':'gray');
   updateMainExportButton();
-  if(section==='standar') loadHppConfig();
-  if(section==='produk' || section==='validasi') loadProducts();
-  if(section==='dna') loadDnaMaterials();
+  if(section==='bahan'){
+    render(); // Segarkan ringkasan supaya kembali ke jumlah bahan baku (109 untuk Admin, 11 untuk TS).
+  }else if(section==='standar'){
+    document.getElementById('statCount').textContent='—';
+    document.getElementById('statShown').textContent='—';
+    document.getElementById('statDate').textContent='—';
+    loadHppConfig();
+  }else if(section==='produk' || section==='validasi'){
+    loadProducts();
+  }else if(section==='dna'){
+    loadDnaMaterials();
+  }
 }
 async function loadDnaMaterials(){
   if(!['admin','ts'].includes(currentRole))return;
@@ -712,11 +736,12 @@ async function loadProducts(){
 function renderProducts(){
    const q=(document.getElementById('produkSearch')?.value||'').toLowerCase().trim();
    const filtered=[...products].sort((a,b)=>String(a.nama_produk||'').localeCompare(String(b.nama_produk||''),'id',{sensitivity:'base',numeric:true})).filter(p=>String(p.nama_produk||'').toLowerCase().includes(q));
-   // Saat TS membuka Produk Jadi, kartu ringkasan mengikuti jumlah produk,
-   // bukan jumlah bahan baku dari menu sebelumnya.
-   if(currentRole==='ts' && activeSection==='produk'){
+   // Ringkasan untuk Admin maupun TS mengikuti menu Produk Jadi yang aktif.
+   if(activeSection==='produk'){
      document.getElementById('statCount').textContent=products.length;
      document.getElementById('statShown').textContent=filtered.length;
+     const latest=products.map(p=>p.tanggal_update||p.updated_at).filter(Boolean).map(v=>String(v).slice(0,10)).sort().pop();
+     document.getElementById('statDate').textContent=fmtDate(latest);
    }
    if(currentRole==='ts'){
      document.getElementById('productsBody').innerHTML=filtered.length?filtered.map((p,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(p.nama_produk)}</div></td><td class="num price"><b>Rp ${money(p.harga_jual)}</b></td></tr>`).join(''):'<tr><td colspan="3" class="empty">Belum ada produk.</td></tr>';
