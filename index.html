@@ -22,9 +22,9 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
     <h1>PT Katraco Santika</h1>
     <p>Price Update — Login untuk mengakses daftar harga.</p>
     <div id="loginError" class="login-error"></div>
-    <div class="field"><label>Username Admin / Email TS</label><input id="loginEmail" type="text" autocomplete="username" placeholder="adminkaposantika"></div>
+    <div class="field"><label>Username</label><input id="loginEmail" type="text" autocomplete="username" placeholder="Username Admin atau TS"></div>
     <div class="field"><label>Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Masukkan password"></div>
-    <p style="font-size:12px;margin:2px 0 0;color:#687386">Admin masuk dengan username. Untuk sementara, TS tetap menggunakan email terdaftar.</p>
+    <p style="font-size:12px;margin:2px 0 0;color:#687386">Admin: gunakan <b>adminkaposantika</b>. Semua TS: gunakan username bersama <b>tskaposantika</b>.</p>
     <button id="loginBtn" class="btn green" style="width:100%;margin-top:4px" onclick="login()">Masuk</button>
   </div>
 </div>
@@ -239,17 +239,25 @@ async function login(){
  const err=document.getElementById('loginError');
  err.style.display='none';
  if(!loginId||!password){err.textContent='Username/email dan password wajib diisi.';err.style.display='block';return}
- // Tahap 1: username untuk Admin dipetakan ke email akun Supabase Admin yang sudah ada.
- // TS tetap dapat login dengan email terdaftar sampai tahap username TS dibuat.
+ // Pemetaan username ke akun Supabase Auth yang sudah ada.
+ // Seluruh TS memakai satu akun bersama ber-role ts.
+ // Email lengkap tetap bisa dipakai untuk pemulihan/akses Admin jika diperlukan.
  const adminUsername='adminkaposantika';
  const adminEmail='stefanusn55@gmail.com';
+ const tsUsername='tskaposantika';
+ const tsEmail='stefanusn58@gmail.com';
+ const normalizedLogin=loginId.trim();
  let email='';
- if(loginId.includes('@')){
-   email=loginId;
- }else if(loginId.toLowerCase()===adminUsername){
+ if(normalizedLogin.toLowerCase()===adminUsername){
    email=adminEmail;
+ }else if(normalizedLogin.toLowerCase()===tsUsername){
+   email=tsEmail;
+ }else if(normalizedLogin.includes('@')){
+   email=normalizedLogin.toLowerCase();
+ }else if(/^[a-zA-Z0-9._%+-]+$/.test(normalizedLogin)){
+   email=normalizedLogin.toLowerCase()+'@gmail.com';
  }else{
-   err.textContent='Username Admin belum cocok. Gunakan adminkaposantika untuk Admin; akun TS sementara menggunakan email terdaftar.';
+   err.textContent='Username tidak valid. Admin gunakan adminkaposantika; seluruh TS gunakan tskaposantika.';
    err.style.display='block';
    return;
  }
