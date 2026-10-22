@@ -459,8 +459,8 @@ function exportDnaExcel(){
    downloadHtmlExcel('DAFTAR DNA DAN HARGA JUAL — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Cust','Biaya Tambahan/kg','Harga Jual DNA/kg','Update'],rows,'Daftar_DNA_Harga_Jual_Katraco_'+today()+'.xls',[4,5,6]);
    return;
  }
- const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_3)||0,Number(x.harga_jual_dna)||0,x.tanggal_update||'']);
- downloadHtmlExcel('DAFTAR DNA DAN HARGA JUAL — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Cust','Harga Jual/kg','Update'],rows,'Daftar_DNA_TS_Harga_Jual_'+today()+'.xls',[4,5]);
+ const rows=sorted.map((x,i)=>[i+1,x.nama_bahan||'',x.spesifikasi||'',x.kemasan||'',Number(x.harga_jual_dna)||0,x.tanggal_update||'']);
+ downloadHtmlExcel('DAFTAR DNA DAN HARGA JUAL — PT KATRACO SANTIKA',['No','Nama Bahan','Spesifikasi','Kemasan','Harga Jual/kg','Update'],rows,'Daftar_DNA_TS_Harga_Jual_'+today()+'.xls',[4]);
 }
 
 
@@ -650,12 +650,12 @@ function renderDna(){
   if(head){
     head.innerHTML=admin
       ? '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th class="num">Biaya Tambahan/kg</th><th class="num">Harga Jual/kg</th><th>Update</th><th>Aksi</th></tr>'
-      : '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th class="num">Harga Jual/kg</th><th>Update</th></tr>';
+      : '<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Jual/kg</th><th>Update</th></tr>';
   }
   if(admin){
     body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_3||0)}</td><td class="num price">Rp ${money(x.biaya_dna||0)}</td><td class="num price"><b>Rp ${money(x.harga_jual_dna||0)}</b></td><td>${fmtDate(x.tanggal_update)}</td><td><button class="icon" onclick="openDnaCosts(${Number(x.id)})">Biaya</button></td></tr>`).join(''):'<tr><td colspan="9" class="empty">Tidak ada bahan dengan tulisan DNA pada nama atau spesifikasi.</td></tr>';
   }else{
-    body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_3||0)}</td><td class="num price"><b>Rp ${money(x.harga_jual_dna||0)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Tidak ada bahan DNA yang tersedia.</td></tr>';
+    body.innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price"><b>Rp ${money(x.harga_jual_dna||0)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Tidak ada bahan DNA yang tersedia.</td></tr>';
   }
   if(activeSection==='dna'){
     document.getElementById('statCount').textContent=dnaMaterials.length;
