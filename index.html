@@ -73,8 +73,9 @@ main{padding:24px 20px}.stats{display:grid;grid-template-columns:repeat(4,1fr);g
       <input id="search" class="search" placeholder="Cari nama bahan, spesifikasi, atau kemasan..." oninput="render()">
       <input id="date" class="datebox" type="date" disabled>
     </div>
+    <div id="materialCostNotice" class="notice" style="display:none;margin:14px"></div>
     <div class="table-wrap">
-      <table><thead id="thead"></thead><tbody id="tbody"><tr><td class="empty">Memuat data...</td></tr></tbody></table>
+      <table style="min-width:1200px"><thead id="thead"></thead><tbody id="tbody"><tr><td class="empty">Memuat data...</td></tr></tbody></table>
     </div>
   </section>
   <section id="produkSection" class="panel" style="display:none">
@@ -195,6 +196,7 @@ let currentRole = null;
 let currentName = '';
 let data = [];
 let editId = null;
+let materialCostTableError = '';
 
 function money(v){return new Intl.NumberFormat('id-ID').format(Math.round(Number(v)||0))}
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
@@ -315,7 +317,7 @@ async function logout(){await db.auth.signOut();currentUser=null;currentRole=nul
 
 async function setupHeader(){
  const th=document.getElementById('thead');
- if(currentRole==='admin') th.innerHTML='<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga 1</th><th class="num">Harga 2</th><th class="num">Harga 3</th><th>Update</th><th>Aksi</th></tr>';
+ if(currentRole==='admin') th.innerHTML='<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga 1</th><th class="num">Harga 2</th><th class="num">Harga 3 (Dasar)</th><th class="num">Biaya Tambahan/kg</th><th class="num">Harga 3 + Biaya</th><th>Update</th><th>Aksi</th></tr>';
  else th.innerHTML='<tr><th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th class="num">Harga Cust</th><th>Update</th></tr>';
 }
 
@@ -345,17 +347,32 @@ function isAllowedTSMaterial(name){
 }
 
 async function loadData(){
- document.getElementById('tbody').innerHTML='<tr><td colspan="9" class="empty">Memuat data...</td></tr>';
+ document.getElementById('tbody').innerHTML='<tr><td colspan="11" class="empty">Memuat data...</td></tr>';
+ const notice=document.getElementById('materialCostNotice');
  if(currentRole==='admin'){
    const {data:rows,error}=await db.from('harga_bahan').select('*').order('nama_bahan',{ascending:true});
-   if(error){showDataError(error);return} data=rows||[];
+   if(error){showDataError(error);return;}
+   const {data:costs,error:costError}=await db.from('biaya_tambahan_bahan').select('bahan_id,biaya_per_kg');
+   materialCostTableError=costError?(costError.message||String(costError)):'';
+   const totals=new Map();
+   if(!costError)(costs||[]).forEach(c=>totals.set(Number(c.bahan_id),(totals.get(Number(c.bahan_id))||0)+(Number(c.biaya_per_kg)||0)));
+   data=(rows||[]).map(x=>{
+     const extra=totals.get(Number(x.id))||0;
+     return {...x,biaya_bahan:extra,harga_3_final:(Number(x.harga_3)||0)+extra};
+   });
+   if(notice){
+     notice.style.display=costError?'block':'none';
+     notice.textContent=costError?'Fitur Biaya Tambahan Bahan Baku belum siap. Jalankan SQL setup_biaya_tambahan_bahan.sql terlebih dahulu. Pesan: '+materialCostTableError:'';
+   }
  }else{
-   const {data:rows,error}=await db.from('harga_ts').select('*').order('nama_bahan',{ascending:true});
-   if(error){showDataError(error);return} data=(rows||[]).filter(x=>isAllowedTSMaterial(x.nama_bahan));
+   const {data:rows,error}=await db.rpc('daftar_harga_bahan_ts');
+   if(error){showDataError(new Error('Gagal memuat daftar Harga Cust TS. Jalankan SQL setup_biaya_tambahan_bahan.sql terlebih dahulu. '+(error.message||'')));return;}
+   data=(rows||[]).filter(x=>isAllowedTSMaterial(x.nama_bahan)).map(x=>({...x,biaya_bahan:null,harga_3_final:Number(x.harga_3)||0}));
+   if(notice)notice.style.display='none';
  }
  render();
 }
-function showDataError(error){console.error(error);document.getElementById('tbody').innerHTML=`<tr><td colspan="9" class="empty">Gagal memuat data: ${esc(error.message||error)}</td></tr>`}
+function showDataError(error){console.error(error);document.getElementById('tbody').innerHTML=`<tr><td colspan="11" class="empty">Gagal memuat data: ${esc(error.message||error)}</td></tr>`}
 async function refreshData(){
  if(activeSection==='produk'){await loadProducts();return;}
  if(activeSection==='dna'){await loadDnaMaterials();return;}
@@ -373,7 +390,6 @@ function render(){
  const sortedData=sortByNameAtoZ(data);
  const filtered=sortedData.filter(x=>[x.nama_bahan,x.spesifikasi,x.kemasan].join(' ').toLowerCase().includes(q));
  const latest=data.map(x=>x.tanggal_update).filter(Boolean).sort().pop();
- // Kartu ringkasan mengikuti Bahan Baku saja saat menu ini aktif.
  if(activeSection==='bahan'){
    document.getElementById('statCount').textContent=data.length;
    document.getElementById('statShown').textContent=filtered.length;
@@ -381,7 +397,7 @@ function render(){
  }
  document.getElementById('date').value=latest||'';
  if(currentRole==='admin'){
-   document.getElementById('tbody').innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_1)}</td><td class="num price">Rp ${money(x.harga_2)}</td><td class="num price"><b>Rp ${money(x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td><td class="row-actions"><button class="icon" onclick="openEdit(${x.id})">Edit</button> <button class="icon del" onclick="delItem(${x.id},'${esc(x.nama_bahan).replace(/'/g,'\\\'')}')">Hapus</button></td></tr>`).join(''):`<tr><td colspan="9" class="empty">Data tidak ditemukan.</td></tr>`;
+   document.getElementById('tbody').innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price">Rp ${money(x.harga_1)}</td><td class="num price">Rp ${money(x.harga_2)}</td><td class="num price">Rp ${money(x.harga_3)}</td><td class="num price">Rp ${money(x.biaya_bahan||0)}</td><td class="num price"><b>Rp ${money(x.harga_3_final??x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td><td class="row-actions"><button class="icon" onclick="openEdit(${x.id})">Edit</button> <button class="icon del" onclick="delItem(${x.id},'${esc(x.nama_bahan).replace(/'/g,'\\\'')}')">Hapus</button> <button class="icon" onclick="openMaterialCosts(${Number(x.id)})">Biaya</button></td></tr>`).join(''):`<tr><td colspan="11" class="empty">Data tidak ditemukan.</td></tr>`;
  }else{
    document.getElementById('tbody').innerHTML=filtered.length?filtered.map((x,i)=>`<tr><td>${i+1}</td><td><div class="name">${esc(x.nama_bahan)}</div></td><td>${esc(x.spesifikasi)||'-'}</td><td>${x.kemasan?`<span class="tag">${esc(x.kemasan)}</span>`:'-'}</td><td class="num price"><b>Rp ${money(x.harga_3)}</b></td><td>${fmtDate(x.tanggal_update)}</td></tr>`).join(''):`<tr><td colspan="6" class="empty">Data tidak ditemukan.</td></tr>`;
  }
@@ -452,9 +468,9 @@ function downloadHtmlExcel(title, headers, rows, filename, numericColumns=[]){
 }
 
 function exportMaterialsExcel(){
- const rows=sortByNameAtoZ(data).map((x,i)=> currentRole==='admin'?({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga1:x.harga_1,harga2:x.harga_2,harga3:x.harga_3,update:x.tanggal_update}):({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga3:x.harga_3,update:x.tanggal_update}));
- const body=rows.map(x=>currentRole==='admin'?`<tr><td>${x.no}</td><td>${htmlExcelEscape(x.nama)}</td><td>${htmlExcelEscape(x.spesifikasi)}</td><td>${htmlExcelEscape(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga1)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga2)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${htmlExcelEscape(x.update)}</td></tr>`:`<tr><td>${x.no}</td><td>${htmlExcelEscape(x.nama)}</td><td>${htmlExcelEscape(x.spesifikasi)}</td><td>${htmlExcelEscape(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${htmlExcelEscape(x.update)}</td></tr>`).join('');
- const headers=currentRole==='admin'?'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 1</th><th>Harga 2</th><th>Harga 3</th><th>Update</th>':'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga Cust</th><th>Update</th>';
+ const rows=sortByNameAtoZ(data).map((x,i)=> currentRole==='admin'?({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga1:x.harga_1,harga2:x.harga_2,harga3:x.harga_3,biaya:x.biaya_bahan||0,hargaFinal:x.harga_3_final??x.harga_3,update:x.tanggal_update}):({no:i+1,nama:x.nama_bahan||'',spesifikasi:x.spesifikasi||'',kemasan:x.kemasan||'',harga3:x.harga_3,update:x.tanggal_update}));
+ const body=rows.map(x=>currentRole==='admin'?`<tr><td>${x.no}</td><td>${htmlExcelEscape(x.nama)}</td><td>${htmlExcelEscape(x.spesifikasi)}</td><td>${htmlExcelEscape(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga1)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga2)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.biaya)||0)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.hargaFinal)||0)}</td><td>${htmlExcelEscape(x.update)}</td></tr>`:`<tr><td>${x.no}</td><td>${htmlExcelEscape(x.nama)}</td><td>${htmlExcelEscape(x.spesifikasi)}</td><td>${htmlExcelEscape(x.kemasan)}</td><td style="mso-number-format:'#,##0';">${Math.round(Number(x.harga3)||0)}</td><td>${htmlExcelEscape(x.update)}</td></tr>`).join('');
+ const headers=currentRole==='admin'?'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga 1</th><th>Harga 2</th><th>Harga 3 (Dasar)</th><th>Biaya Tambahan/kg</th><th>Harga 3 + Biaya</th><th>Update</th>':'<th>No</th><th>Nama Bahan</th><th>Spesifikasi</th><th>Kemasan</th><th>Harga Cust</th><th>Update</th>';
  const xls=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:Arial}th{background:#d9e2f3;font-weight:bold;border:1px solid #888;padding:6px}td{border:1px solid #aaa;padding:5px}</style></head><body><h2>DAFTAR HARGA BAHAN BAKU - PT KATRACO SANTIKA</h2><div>Harga Update: ${htmlExcelEscape(new Date().toLocaleDateString('id-ID'))}</div><br><table border="1"><tr>${headers}</tr>${body}</table></body></html>`;
  const blob=new Blob(['\ufeff',xls],{type:'application/vnd.ms-excel'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='Daftar_Harga_Katraco_'+today()+'.xls';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
@@ -825,6 +841,7 @@ async function saveHppConfig(){
 let activeCostProductId=null, costRows=[];
 let activeCostMode='product';
 let activeCostDnaId=null;
+let activeCostMaterialId=null;
 async function openCosts(productId){
  if(currentRole!=='admin')return;
  const prod=products.find(p=>Number(p.id)===Number(productId));if(!prod)return;
@@ -833,6 +850,19 @@ async function openCosts(productId){
  document.getElementById('costNotice').textContent='Biaya khusus ini ditambahkan setelah perhitungan Biaya Produksi, Margin, dan Operasional; biaya khusus tidak dikenai persentase lagi. Masukkan dalam rupiah per 1 kg produk jadi.';
  document.getElementById('costName').placeholder='Contoh: Kemasan, tenaga kerja, listrik';
  document.getElementById('costAmount').placeholder='Contoh: 500';
+ document.getElementById('costModal').classList.add('show');
+ await loadCosts();
+}
+async function openMaterialCosts(bahanId){
+ if(currentRole!=='admin')return;
+ if(materialCostTableError){alert('Tabel biaya tambahan bahan baku belum tersedia. Jalankan SQL setup_biaya_tambahan_bahan.sql terlebih dahulu.');return;}
+ const bahan=data.find(x=>Number(x.id)===Number(bahanId));if(!bahan)return;
+ activeCostMode='material';activeCostProductId=null;activeCostDnaId=null;activeCostMaterialId=Number(bahanId);costRows=[];
+ document.getElementById('costTitle').textContent='Biaya Tambahan Bahan Baku: '+bahan.nama_bahan;
+ document.getElementById('costNotice').textContent='Tambahkan biaya tambahan per kg untuk bahan ini. Harga Cust akhir = Harga 3 dasar + seluruh biaya tambahan. Biaya ini tidak mengubah Harga 1 atau Harga 2.';
+ document.getElementById('costName').placeholder='Contoh: Packing, handling, biaya impor';
+ document.getElementById('costAmount').placeholder='Contoh: 500';
+ document.getElementById('costName').value='';document.getElementById('costAmount').value='';
  document.getElementById('costModal').classList.add('show');
  await loadCosts();
 }
@@ -848,15 +878,22 @@ async function openDnaCosts(bahanId){
  document.getElementById('costModal').classList.add('show');
  await loadCosts();
 }
-function closeCosts(){document.getElementById('costModal').classList.remove('show');activeCostProductId=null;activeCostDnaId=null;activeCostMode='product'}
+function closeCosts(){document.getElementById('costModal').classList.remove('show');activeCostProductId=null;activeCostDnaId=null;activeCostMaterialId=null;activeCostMode='product'}
 async function loadCosts(){
  if(currentRole!=='admin')return;
  if(activeCostMode==='dna'){await loadDnaCosts();return;}
+ if(activeCostMode==='material'){await loadMaterialCosts();return;}
  if(!activeCostProductId)return;
  const {data:rows,error}=await db.from('biaya_tambahan_produk').select('id,produk_id,nama_biaya,biaya_per_kg').eq('produk_id',activeCostProductId).order('nama_biaya',{ascending:true});
- if(error){document.getElementById('costBody').innerHTML=`<tr><td colspan="4" class="empty">Gagal memuat biaya: ${esc(error.message)}. Pastikan SQL Biaya Tambahan sudah dijalankan.</td></tr>`;return}
+ if(error){document.getElementById('costBody').innerHTML=`<tr><td colspan="4" class="empty">Gagal memuat biaya: ${esc(error.message)}. Pastikan SQL Biaya Tambahan sudah dijalankan.</td></tr>`;return;}
  costRows=rows||[];
  renderCosts();
+}
+async function loadMaterialCosts(){
+ if(currentRole!=='admin'||!activeCostMaterialId)return;
+ const {data:rows,error}=await db.from('biaya_tambahan_bahan').select('id,bahan_id,nama_biaya,biaya_per_kg').eq('bahan_id',activeCostMaterialId).order('nama_biaya',{ascending:true});
+ if(error){document.getElementById('costBody').innerHTML=`<tr><td colspan="4" class="empty">Gagal memuat biaya bahan baku: ${esc(error.message)}. Jalankan SQL setup_biaya_tambahan_bahan.sql terlebih dahulu.</td></tr>`;document.getElementById('costTotal').textContent='Rp 0';return;}
+ costRows=rows||[];renderMaterialCosts();
 }
 async function loadDnaCosts(){
  if(currentRole!=='admin'||!activeCostDnaId)return;
@@ -869,6 +906,7 @@ async function loadDnaCosts(){
 }
 function renderCosts(){
  if(activeCostMode==='dna'){renderDnaCosts();return;}
+ if(activeCostMode==='material'){renderMaterialCosts();return;}
  const body=document.getElementById('costBody');
  body.innerHTML=costRows.length?costRows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama_biaya)}</td><td class="num price">Rp ${money(r.biaya_per_kg)}</td><td><button class="icon del" onclick="deleteCostItem(${r.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">Belum ada biaya tambahan.</td></tr>';
  const total=costRows.reduce((sum,r)=>sum+(Number(r.biaya_per_kg)||0),0);
@@ -884,9 +922,19 @@ function renderDnaCosts(){
  applyDnaCostsToMaterials();
  renderDna();
 }
+function renderMaterialCosts(){
+ const body=document.getElementById('costBody');
+ body.innerHTML=costRows.length?costRows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama_biaya)}</td><td class="num price">Rp ${money(r.biaya_per_kg)}</td><td><button class="icon del" onclick="deleteCostItem(${r.id})">Hapus</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">Belum ada biaya tambahan untuk bahan baku ini.</td></tr>';
+ const total=costRows.reduce((sum,r)=>sum+(Number(r.biaya_per_kg)||0),0);
+ document.getElementById('costTotal').textContent='Rp '+money(total);
+ const bahan=data.find(x=>Number(x.id)===Number(activeCostMaterialId));
+ if(bahan){bahan.biaya_bahan=total;bahan.harga_3_final=(Number(bahan.harga_3)||0)+total;}
+ render();
+}
 async function addCostItem(){
  if(currentRole!=='admin')return;
  if(activeCostMode==='dna'){await addDnaCostItem();return;}
+ if(activeCostMode==='material'){await addMaterialCostItem();return;}
  if(!activeCostProductId)return;
  const nama_biaya=document.getElementById('costName').value.trim();
  const biaya_per_kg=Number(document.getElementById('costAmount').value);
@@ -895,6 +943,19 @@ async function addCostItem(){
  if(costRows.some(r=>r.nama_biaya.toLowerCase()===nama_biaya.toLowerCase())){alert('Nama biaya tersebut sudah ada untuk produk ini.');return}
  const {error}=await db.from('biaya_tambahan_produk').insert({produk_id:activeCostProductId,nama_biaya,biaya_per_kg});
  if(error){alert('Gagal menyimpan biaya: '+error.message);return}
+ document.getElementById('costName').value='';document.getElementById('costAmount').value='';
+ await loadCosts();
+}
+async function addMaterialCostItem(){
+ if(currentRole!=='admin'||!activeCostMaterialId)return;
+ if(materialCostTableError){alert('Tabel biaya tambahan bahan baku belum tersedia. Jalankan SQL setup_biaya_tambahan_bahan.sql terlebih dahulu.');return;}
+ const nama_biaya=document.getElementById('costName').value.trim();
+ const biaya_per_kg=Number(document.getElementById('costAmount').value);
+ if(!nama_biaya){alert('Nama biaya wajib diisi.');return;}
+ if(!Number.isFinite(biaya_per_kg)||biaya_per_kg<0){alert('Biaya harus berupa angka nol atau lebih.');return;}
+ if(costRows.some(r=>r.nama_biaya.toLowerCase()===nama_biaya.toLowerCase())){alert('Nama biaya tersebut sudah ada untuk bahan baku ini.');return;}
+ const {error}=await db.from('biaya_tambahan_bahan').insert({bahan_id:activeCostMaterialId,nama_biaya,biaya_per_kg});
+ if(error){alert('Gagal menyimpan biaya bahan baku: '+error.message);return;}
  document.getElementById('costName').value='';document.getElementById('costAmount').value='';
  await loadCosts();
 }
@@ -913,15 +974,21 @@ async function addDnaCostItem(){
 }
 async function deleteCostItem(id){
  if(currentRole!=='admin')return;
+ if(activeCostMode==='material'){
+   if(!confirm('Hapus biaya tambahan bahan baku ini?'))return;
+   const {error}=await db.from('biaya_tambahan_bahan').delete().eq('id',id);
+   if(error){alert('Gagal menghapus biaya bahan baku: '+error.message);return;}
+   await loadCosts();return;
+ }
  if(activeCostMode==='dna'){
    if(!confirm('Hapus biaya DNA ini?'))return;
    const {error}=await db.from('biaya_tambahan_dna').delete().eq('id',id);
-   if(error){alert('Gagal menghapus biaya DNA: '+error.message);return}
+   if(error){alert('Gagal menghapus biaya DNA: '+error.message);return;}
    await loadCosts();return;
  }
  if(!confirm('Hapus biaya tambahan ini?'))return;
  const {error}=await db.from('biaya_tambahan_produk').delete().eq('id',id);
- if(error){alert('Gagal menghapus biaya: '+error.message);return}
+ if(error){alert('Gagal menghapus biaya: '+error.message);return;}
  await loadCosts();
 }
 
